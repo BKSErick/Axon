@@ -118,7 +118,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Remove page access tokens from stored pages (keep them server-side only in the main token)
+    // Remove page access tokens from stored pages. Page tokens are copied into
+    // server-side tables below so publishing can work immediately after OAuth.
     const pagesForStorage = pages.map(({ access_token, ...rest }) => rest)
 
     const { data: connection, error: upsertError } = await supabase
@@ -146,6 +147,52 @@ serve(async (req) => {
     }
 
     console.log(`[meta-oauth] ✅ Connection saved for client ${clientId}`)
+
+    const primaryPage = pages[0] || null
+    const primaryInstagram = primaryPage
+      ? instagramAccounts.find((ig) => ig.linked_page_id === primaryPage.id) || instagramAccounts[0] || null
+      : instagramAccounts[0] || null
+
+    if (primaryPage) {
+      const { error: profileError } = await supabase
+        .from('social_client_profiles')
+        .upsert({
+          client_id: clientId,
+          facebook_page_id: primaryPage.id,
+          facebook_page_name: primaryPage.name,
+          facebook_page_token: primaryPage.access_token,
+          instagram_account_id: primaryInstagram?.id || null,
+          instagram_username: primaryInstagram?.username || null,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'client_id',
+        })
+
+      if (profileError) {
+        console.warn('[meta-oauth] Could not hydrate social_client_profiles:', profileError.message)
+      }
+    }
+
+    for (const page of pages) {
+      const pageInstagram = instagramAccounts.find((ig) => ig.linked_page_id === page.id)
+      const { error: tokenError } = await supabase
+        .from('social_meta_tokens')
+        .upsert({
+          client_id: clientId,
+          page_id: page.id,
+          page_name: page.name,
+          ig_account_id: pageInstagram?.id || null,
+          access_token_enc: page.access_token,
+          expires_at: tokenExpiresAt,
+          last_verified_at: new Date().toISOString(),
+        }, {
+          onConflict: 'client_id,page_id',
+        })
+
+      if (tokenError) {
+        console.warn(`[meta-oauth] Could not save token for page ${page.id}:`, tokenError.message)
+      }
+    }
 
     // Return success (WITHOUT the access_token for security)
     return new Response(
