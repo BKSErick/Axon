@@ -252,12 +252,39 @@ export function RelinkModal({ open, onClose, account }) {
 }
 
 export function NewAudienceModal({ open, onClose }) {
+  const [form, setForm] = useState({ name: '', source: 'Leads (formulários)' });
+  const [saving, setSaving] = useState(false);
+  const createAudience = async () => {
+    if (!form.name.trim()) {
+      toast('Informe o nome da audiência', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('audiences').insert({
+        name: form.name.trim(),
+        source: form.source,
+        status: 'draft',
+        size: 0,
+        metadata: { created_from: 'axon_modal' },
+      });
+      if (error) throw error;
+      toast('Audiência criada', 'success');
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      console.error('[NewAudienceModal]', e);
+      toast(`Erro ao criar audiência: ${e.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <Modal open={open} onClose={onClose} title="Nova audiência" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Audiência criada', 'success'); onClose(); }}>Criar</button></>}>
+    <Modal open={open} onClose={onClose} title="Nova audiência" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving} onClick={createAudience}>{saving ? 'Criando...' : 'Criar'}</button></>}>
       <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Audiências geradas por IA com base em leads, engajamento ou comportamento.</p>
-      <Field label="Nome"><input className="input" placeholder="ex: Leads quentes 30d" /></Field>
+      <Field label="Nome"><input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="ex: Leads quentes 30d" /></Field>
       <Field label="Origem">
-        <select className="input">
+        <select className="input" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}>
           <option>Leads (formulários)</option>
           <option>Engajamento Instagram</option>
           <option>Lookalike de compradores</option>
@@ -270,7 +297,7 @@ export function NewAudienceModal({ open, onClose }) {
 
 export function NewKeywordModal({ open, onClose }) {
   return (
-    <Modal open={open} onClose={onClose} title="Nova palavra-chave" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Keyword adicionada'); onClose(); }}>Adicionar</button></>}>
+    <Modal open={open} onClose={onClose} title="Nova palavra-chave" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Google Ads ainda está em preview. Keyword não foi enviada.', 'info'); onClose(); }}>Adicionar</button></>}>
       <Field label="Termo"><input className="input" placeholder="agência de marketing digital" /></Field>
       <Field label="Tipo de match"><select className="input"><option>Ampla</option><option>Frase</option><option>Exata</option></select></Field>
     </Modal>
@@ -279,7 +306,7 @@ export function NewKeywordModal({ open, onClose }) {
 
 export function NewNegativeModal({ open, onClose }) {
   return (
-    <Modal open={open} onClose={onClose} title="Nova negativa" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Negativa adicionada'); onClose(); }}>Adicionar</button></>}>
+    <Modal open={open} onClose={onClose} title="Nova negativa" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Google Ads ainda está em preview. Negativa não foi enviada.', 'info'); onClose(); }}>Adicionar</button></>}>
       <Field label="Termo"><input className="input" placeholder="grátis" /></Field>
       <Field label="Lista"><select className="input"><option>Lista global</option><option>Conta específica</option></select></Field>
     </Modal>
@@ -288,8 +315,8 @@ export function NewNegativeModal({ open, onClose }) {
 
 export function NewGoogleCampaignModal({ open, onClose }) {
   return (
-    <Modal open={open} onClose={onClose} title="Nova campanha Google" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Campanha criada (mock)'); onClose(); }}>Criar</button></>}>
-      <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Mock — integração Google Ads API ainda pendente.</p>
+    <Modal open={open} onClose={onClose} title="Nova campanha Google" footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Google Ads ainda está em preview. Campanha não foi criada.', 'info'); onClose(); }}>Criar</button></>}>
+      <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Preview - integração Google Ads API ainda pendente.</p>
       <Field label="Nome"><input className="input" placeholder="[SEARCH] Brand Defense" /></Field>
       <Field label="Tipo"><select className="input"><option>Search</option><option>Performance Max</option><option>Display</option><option>Video</option></select></Field>
       <Field label="Orçamento diário (R$)"><input className="input" type="number" placeholder="100" /></Field>
@@ -298,11 +325,28 @@ export function NewGoogleCampaignModal({ open, onClose }) {
 }
 
 export function SendReportsModal({ open, onClose }) {
+  const [sending, setSending] = useState(false);
+  const sendReports = async () => {
+    setSending(true);
+    try {
+      const { data, error } = await supabase.rpc('enqueue_manual_reports');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast(data?.message || 'Relatórios enfileirados', 'success');
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      console.error('[SendReportsModal]', e);
+      toast(`Erro ao enfileirar relatórios: ${e.message}`, 'error');
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <Modal open={open} onClose={onClose} title="Enviar relatórios"
-      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Relatórios na fila', 'success'); onClose(); }}>Enviar</button></>}>
+      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={sending} onClick={sendReports}>{sending ? 'Enfileirando...' : 'Enviar'}</button></>}>
       <Field label="Período"><select className="input"><option>Últimas 24h</option><option>Últimos 7 dias</option><option>Últimos 30 dias</option></select></Field>
-      <Field label="Clientes"><select className="input"><option>Todos os ativos</option><option>Selecionar específicos</option></select></Field>
+      <Field label="Clientes"><select className="input"><option>Todos com WhatsApp ativo</option></select></Field>
     </Modal>
   );
 }

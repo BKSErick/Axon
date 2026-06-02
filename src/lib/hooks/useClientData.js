@@ -27,12 +27,6 @@ const mockOrders = [
     { id: '#ORD-7779', customer: 'Marcos Silva', total: 59.90, status: 'delivered', date: 'Ontem' },
 ];
 
-const mockReports = [
-    { id: 101, title: 'Relatório Mensal - Janeiro', date: '01/02/2026', status: 'ready', size: '2.4 MB' },
-    { id: 102, title: 'Performance Semanal (01-07)', date: '08/02/2026', status: 'ready', size: '1.1 MB' },
-    { id: 103, title: 'Análise de Criativos', date: '15/02/2026', status: 'processing', size: '-' },
-];
-
 // --- HOOKS ---
 
 export const useKpis = (clientId) => {
@@ -160,7 +154,33 @@ export const useOrders = (clientId) => {
 };
 
 export const useReports = (clientId) => {
-    return { data: mockReports, loading: false };
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!clientId) { setLoading(false); return; }
+        let mounted = true;
+        (async () => {
+            try {
+                const { data: rows, error } = await supabase
+                    .from('reports')
+                    .select('id, title, period, status, date, size, pdf_url, whatsapp_number')
+                    .eq('client_id', clientId)
+                    .order('date', { ascending: false })
+                    .limit(50);
+                if (error) throw error;
+                if (mounted) setData(rows || []);
+            } catch (error) {
+                console.error('[useReports]', error);
+                if (mounted) setData([]);
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, [clientId]);
+
+    return { data, loading };
 };
 
 export const useEngagementAnalytics = (clientId) => {

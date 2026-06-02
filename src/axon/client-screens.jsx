@@ -1,7 +1,7 @@
 /* ============================================
    Axon — Client Screens (real client data + Axon visual)
    ============================================ */
-import React, { useMemo } from 'react';
+import React from 'react';
 import { I } from './icons';
 import { KPI, Status, TT, fmt, R } from './common';
 import { useAxonData } from './data-bridge';
@@ -63,9 +63,8 @@ export function ClientCreatives() {
 }
 
 export function ClientLeads({ onOpen }) {
-  const { clientCampaigns } = useAxonData();
-  const leads = useMemo(() => Array.from({ length: 10 }, (_, i) => ({ id: `lead_${i}`, name: ['Mariana Lopes', 'Rafael Lima', 'Ana Beatriz', 'Carlos Mendes'][i % 4], phone: '+55 11 9' + String(91605660 + i), source: clientCampaigns[i % Math.max(clientCampaigns.length, 1)]?.name || 'Campanha Meta', score: 92 - i * 4, status: i % 3 === 0 ? 'Novo' : i % 3 === 1 ? 'Em contato' : 'Qualificado' })), [clientCampaigns]);
-  return <div className="fadein"><PageHead eyebrow="Aquisição" title="Central de Leads" sub="Leads recentes capturados pelas campanhas" actions={<button className="btn"><I.download />Exportar</button>} /><div className="card"><table className="tbl"><thead><tr><th>Lead</th><th>Telefone</th><th>Origem</th><th className="right">Score IA</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{leads.map(l => <tr key={l.id}><td><div style={{ fontWeight: 600, fontSize: 13 }}>{l.name}</div><div className="mono-id">{l.id}</div></td><td className="num">{l.phone}</td><td className="muted" style={{ fontSize: 12 }}>{l.source}</td><td className="right num">{l.score}</td><td><span className="badge success"><span className="dot" />{l.status}</span></td><td className="right"><button className="btn btn-sm" onClick={() => onOpen?.(l)}>Abrir</button></td></tr>)}</tbody></table></div></div>;
+  const leads = [];
+  return <div className="fadein"><PageHead eyebrow="Aquisição" title="Central de Leads" sub="Leads recentes capturados pelas campanhas" actions={<button className="btn"><I.download />Exportar</button>} /><div className="card">{leads.length ? <table className="tbl"><thead><tr><th>Lead</th><th>Telefone</th><th>Origem</th><th className="right">Score IA</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{leads.map(l => <tr key={l.id}><td><div style={{ fontWeight: 600, fontSize: 13 }}>{l.name}</div><div className="mono-id">{l.id}</div></td><td className="num">{l.phone}</td><td className="muted" style={{ fontSize: 12 }}>{l.source}</td><td className="right num">{l.score}</td><td><span className="badge success"><span className="dot" />{l.status}</span></td><td className="right"><button className="btn btn-sm" onClick={() => onOpen?.(l)}>Abrir</button></td></tr>)}</tbody></table> : <div className="card-pad empty">Central de Leads real ainda não conectada ao Supabase.</div>}</div></div>;
 }
 
 export function ClientSocial() {
@@ -77,8 +76,8 @@ export function ClientSocial() {
 
 export function ClientReports() {
   const { clientReports, clientKpis } = useAxonData();
-  const rows = clientReports.length ? clientReports : Array.from({ length: 6 }, (_, i) => ({ id: `rep_${i}`, title: 'Relatório Diário', period: 'Últimas 24h', date: new Date(Date.now() - i * 86400000).toISOString(), status: i === 2 ? 'queued' : 'ok' }));
-  return <div className="fadein"><PageHead eyebrow="Conta" title="Relatórios" sub="Histórico de PDFs e envios por WhatsApp" actions={<button className="btn btn-primary"><I.download />Baixar atual</button>} /><div className="kpi-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}><KPI label="Investimento atual" value={clientKpis?.extended?.spend || 0} fmtVal={fmt.brl} delta={null} /><KPI label="Leads atuais" value={clientKpis?.extended?.totalLeads || 0} fmtVal={fmt.int} delta={null} /><KPI label="Relatórios" value={rows.length} delta={null} /></div><div className="sp-20" /><div className="card"><table className="tbl"><thead><tr><th>Relatório</th><th>Período</th><th>Data</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</td><td className="muted" style={{ fontSize: 12 }}>{r.period}</td><td className="muted" style={{ fontSize: 12 }}>{new Date(r.date).toLocaleDateString('pt-BR')}</td><td>{r.status === 'ok' ? <span className="badge success"><I.check className="ico" />Entregue</span> : <span className="badge info"><I.clock className="ico" />Na fila</span>}</td><td className="right"><button className="btn btn-sm"><I.download /></button></td></tr>)}</tbody></table></div></div>;
+  const rows = clientReports;
+  return <div className="fadein"><PageHead eyebrow="Conta" title="Relatórios" sub="Histórico de PDFs e envios por WhatsApp" actions={<button className="btn btn-primary"><I.download />Baixar atual</button>} /><div className="kpi-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}><KPI label="Investimento atual" value={clientKpis?.extended?.spend || 0} fmtVal={fmt.brl} delta={null} /><KPI label="Leads atuais" value={clientKpis?.extended?.totalLeads || 0} fmtVal={fmt.int} delta={null} /><KPI label="Relatórios" value={rows.length} delta={null} /></div><div className="sp-20" /><div className="card">{rows.length ? <table className="tbl"><thead><tr><th>Relatório</th><th>Período</th><th>Data</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</td><td className="muted" style={{ fontSize: 12 }}>{r.period}</td><td className="muted" style={{ fontSize: 12 }}>{r.date ? new Date(r.date).toLocaleDateString('pt-BR') : '—'}</td><td>{['ok', 'sent'].includes(r.status) ? <span className="badge success"><I.check className="ico" />Entregue</span> : <span className="badge info"><I.clock className="ico" />{r.status || 'Na fila'}</span>}</td><td className="right">{r.pdf_url ? <a className="btn btn-sm" href={r.pdf_url} target="_blank" rel="noreferrer"><I.download /></a> : <button className="btn btn-sm" disabled><I.download /></button>}</td></tr>)}</tbody></table> : <div className="card-pad empty">Nenhum relatório disponível ainda.</div>}</div></div>;
 }
 
 export function ClientSettings({ auth, onLogout }) {

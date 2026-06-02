@@ -260,19 +260,22 @@ export function useAllReports(enabled = true) {
       try {
         const { data: rows, error } = await supabase
           .from('reports')
-          .select('id, client_id, title, period, status, date, clients(name)')
+          .select('id, client_id, title, period, status, date, size, pdf_url, whatsapp_number, data, clients(name)')
           .order('date', { ascending: false })
           .limit(100);
         if (error) throw error;
         if (!mounted) return;
         setData((rows || []).map(r => ({
           id: r.id,
-          title: 'Relatório Diário',
+          title: r.title || 'Relatório',
           client: r.client_id,
           clientName: r.clients?.name,
           period: r.period || 'Últimas 24h',
           date: r.date,
-          status: r.status,
+          status: r.status === 'sent' ? 'ok' : r.status,
+          phone: r.whatsapp_number || r.data?.whatsapp_number || null,
+          pdfUrl: r.pdf_url,
+          size: r.size,
           attempts: 1,
         })));
       } catch (e) {
