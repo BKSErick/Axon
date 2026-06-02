@@ -5,7 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { I } from './icons';
 import { KPI, Spark, Status, TT, fmt, R } from './common';
 import { useAxonData } from './data-bridge';
-import { MOCK_PERFORMANCE_30, MOCK_FUNNEL, MOCK_AGE_DIST, MOCK_REGIONS } from '../lib/mocks/axon';
+import { MOCK_AGE_DIST, MOCK_REGIONS } from '../lib/mocks/axon';
 
 // Legacy bridges (heavy components — kept in original location so their
 // internal ../lib and ../data imports stay valid). Namespace import tolerates
@@ -46,7 +46,7 @@ function PageHeader({ eyebrow, title, sub, actions }) {
 export function AdminOverview({ go, auth, onClientChange }) {
   const { adminOverview, clients, loading, errors } = useAxonData();
   const k = adminOverview;
-  const dailyData = (k?.daily?.length ? k.daily.map(d => ({ label: d.date, v: d.spend })) : MOCK_PERFORMANCE_30.map(d => ({ label: d.label, v: d.spend })));
+  const dailyData = (k?.daily?.length ? k.daily.map(d => ({ label: d.date, v: d.spend })) : []);
 
   return (
     <>
@@ -73,10 +73,10 @@ export function AdminOverview({ go, auth, onClientChange }) {
           <><Skel h={110} /><Skel h={110} /><Skel h={110} /><Skel h={110} /></>
         ) : (
           <>
-            <KPI label="Investimento" icon={<I.dollar />} value={k?.totalSpend || 0} fmtVal={fmt.brl} delta={8.2} spark={dailyData.slice(-10)} />
-            <KPI label="Leads gerados" icon={<I.users />} value={k?.totalLeads || 0} fmtVal={fmt.int} delta={12.4} spark={dailyData.slice(-10)} />
-            <KPI label="CPA médio" icon={<I.target />} value={k?.cpa || 0} fmtVal={fmt.brl} delta={-4.3} negative spark={dailyData.slice(-10)} />
-            <KPI label="ROI estimado" icon={<I.trend />} value={Number(k?.roi) || 0} fmtVal={n => (n || 0) + '%'} delta={2.1} spark={dailyData.slice(-10)} />
+            <KPI label="Investimento" icon={<I.dollar />} value={k?.totalSpend || 0} fmtVal={fmt.brl} delta={null} spark={dailyData.slice(-10)} />
+            <KPI label="Leads gerados" icon={<I.users />} value={k?.totalLeads || 0} fmtVal={fmt.int} delta={null} spark={dailyData.slice(-10)} />
+            <KPI label="CPA médio" icon={<I.target />} value={k?.cpa || 0} fmtVal={fmt.brl} delta={null} negative spark={dailyData.slice(-10)} />
+            <KPI label="ROI estimado" icon={<I.trend />} value={Number(k?.roi) || 0} fmtVal={n => (n || 0) + '%'} delta={null} spark={dailyData.slice(-10)} />
           </>
         )}
       </div>
@@ -85,8 +85,8 @@ export function AdminOverview({ go, auth, onClientChange }) {
         <div className="card">
           <div className="card-head"><h2>Investimento × Leads (30 dias)</h2></div>
           <div style={{ padding: 20, height: 260 }}>
-            <R.ResponsiveContainer width="100%" height="100%">
-              <R.AreaChart data={k?.daily?.length ? k.daily.map(d => ({ label: d.date, spend: d.spend, leads: d.leads })) : MOCK_PERFORMANCE_30}>
+            {dailyData.length ? <R.ResponsiveContainer width="100%" height="100%">
+              <R.AreaChart data={k.daily.map(d => ({ label: d.date, spend: d.spend, leads: d.leads }))}>
                 <defs>
                   <linearGradient id="gSpend" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.4} />
@@ -99,25 +99,13 @@ export function AdminOverview({ go, auth, onClientChange }) {
                 <R.Tooltip content={<TT prefix="R$ " />} />
                 <R.Area type="monotone" dataKey="spend" name="Investimento" stroke="rgb(var(--accent))" strokeWidth={2} fill="url(#gSpend)" />
               </R.AreaChart>
-            </R.ResponsiveContainer>
+            </R.ResponsiveContainer> : <div className="empty" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>Sem série diária sincronizada.</div>}
           </div>
         </div>
 
         <div className="card">
           <div className="card-head"><h2>Funil consolidado</h2></div>
-          <div style={{ padding: 16 }}>
-            {MOCK_FUNNEL.map((f, i) => (
-              <div key={i} style={{ marginBottom: 12 }}>
-                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 500 }}>{f.stage}</span>
-                  <span className="num" style={{ fontSize: 12, color: 'rgb(var(--text-2))' }}>{fmt.int(f.v)}</span>
-                </div>
-                <div style={{ height: 6, background: 'rgb(var(--bg-card))', borderRadius: 999 }}>
-                  <div style={{ width: f.pct + '%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, rgb(var(--accent)), #8b5cf6)' }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="card-pad empty">Funil consolidado real ainda não sincronizado.</div>
         </div>
       </div>
 

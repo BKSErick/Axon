@@ -7,8 +7,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { fetchExtendedOverviewData, calculateBusinessMetrics } from '../metricsAggregator';
 import {
-  MOCK_NOTIFICATIONS, MOCK_GOOGLE_CAMPAIGNS,
-  MOCK_KEYWORDS, MOCK_NEGATIVE,
+  MOCK_NOTIFICATIONS,
 } from '../mocks/axon';
 
 function firstValue(...values) {
@@ -393,7 +392,9 @@ export function useSocialOverview(enabled = true) {
       try {
         const [profilesRes, connectionsRes] = await Promise.all([
           supabase.from('social_client_profiles').select('*'),
-          supabase.from('client_meta_connections').select('*'),
+          supabase
+            .from('client_meta_connections')
+            .select('client_id, status, pages, instagram_accounts, token_expires_at, connected_at, updated_at'),
         ]);
 
         const profiles = profilesRes.error ? [] : (profilesRes.data || []);
@@ -468,9 +469,9 @@ export function useSocialOverview(enabled = true) {
 
 // ---------- GOOGLE ADS (mock — sem integração ainda) ----------
 export function useGoogleCampaigns(_clientId) {
-  return { data: MOCK_GOOGLE_CAMPAIGNS, loading: false };
+  return { data: [], loading: false };
 }
 
 export function useGoogleKeywords(_clientId) {
-  return { data: { keywords: MOCK_KEYWORDS, negatives: MOCK_NEGATIVE }, loading: false };
+  return { data: { keywords: [], negatives: [] }, loading: false };
 }

@@ -29,7 +29,7 @@ export const getGlobalToken = async () => {
             cachedGlobalTokenExpires = null;
             dispatchMetaTokenAlert({
                 code: 190,
-                message: 'Token Meta global expirado. Atualize o token em Configurações.',
+                message: 'Token Meta global expirado. Atualize o segredo no Supabase/Edge Functions.',
                 expiresAt: expiredAt,
             });
         } else {
@@ -42,22 +42,6 @@ export const getGlobalToken = async () => {
             }
             return cachedGlobalToken;
         }
-    }
-
-    try {
-        const { data, error } = await supabase
-            .from('business_managers')
-            .select('name, token_expires')
-            .eq('bm_id', 'SYSTEM_USER_TOKEN')
-            .single();
-
-        if (data && data.name) {
-            cachedGlobalToken = data.name;
-            cachedGlobalTokenExpires = data.token_expires || null;
-            return cachedGlobalToken;
-        }
-    } catch (e) {
-        // silent fallback
     }
 
     return null;
@@ -100,27 +84,8 @@ export const clearMetaCache = () => {
  * @param {object} params - Query parameters
  */
 export const fetchMeta = async (endpoint, params = {}, allData = []) => {
-    const token = await getGlobalToken();
-    if (!token) {
-        console.error('Meta Token not found in environment variables or database');
-        return null;
-    }
-
-    // Se o endpoint for uma URL completa (da paginação da Meta), usamos ela direto
-    const isFullUrl = endpoint.startsWith('http');
-    const url = isFullUrl ? new URL(endpoint) : new URL(`${BASE_URL}/${endpoint}`);
-
-    if (!isFullUrl) {
-        // Use page-specific token if provided in params, otherwise use the default System User Token
-        const effectiveToken = params.access_token || token;
-        url.searchParams.append('access_token', effectiveToken);
-        Object.keys(params).forEach(key => {
-            if (key === 'access_token') return; // Already handled above
-            url.searchParams.append(key, params[key]);
-        });
-    }
-
     // Check cache first (skip for pagination URLs as they have their own cursor)
+    const isFullUrl = endpoint.startsWith('http');
     const cacheKey = isFullUrl ? endpoint : getCacheKey(endpoint, params);
     const cached = getFromCache(cacheKey);
     if (cached) {
@@ -129,8 +94,17 @@ export const fetchMeta = async (endpoint, params = {}, allData = []) => {
     }
 
     try {
-        const response = await fetch(url.toString(), { cache: 'no-store' });
-        const data = await response.json();
+        const { data, error } = await supabase.functions.invoke('meta-proxy', {
+            body: {
+                endpoint,
+                params,
+                autoPaginate: Boolean(params.autoPaginate),
+            },
+        });
+
+        if (error) {
+            throw new Error(error.message || 'Meta proxy error');
+        }
 
         if (data.error) {
             // Se for erro de Rate Limit (17 ou 32), avisamos no console de forma destacada
@@ -147,7 +121,7 @@ export const fetchMeta = async (endpoint, params = {}, allData = []) => {
 
         // Paginação automática (Recursiva)
         const combinedData = allData.concat(data.data || []);
-        if (data.paging?.next && params.autoPaginate) {
+        if (data.paging?.next && params.autoPaginate && !data._autoPaginated) {
             return fetchMeta(data.paging.next, params, combinedData);
         }
 
@@ -549,7 +523,7 @@ export const getLeadForms = async (adAccountId = null) => {
         for (const bm of businesses) {
             try {
                 const pagesData = await fetchMeta(`${bm.id}/owned_pages`, {
-                    fields: 'id,name,access_token', limit: 100
+                    fields: 'id,name', limit: 100
                 });
                 pages.push(...(pagesData.data || []).map(p => ({ ...p, src: 'bm' })));
             } catch (e) { /* silent */ }
@@ -562,7 +536,7 @@ export const getLeadForms = async (adAccountId = null) => {
     // ── Strategy 2: me/accounts (Personal User Token) ────────────────────────
     if (pages.length === 0) {
         try {
-            const acc = await fetchMeta('me/accounts', { fields: 'id,name,access_token', limit: 100 });
+            const acc = await fetchMeta('me/accounts', { fields: 'id,name', limit: 100 });
             pages = (acc.data || []).map(p => ({ ...p, src: 'me_accounts' }));
             console.log(`[getLeadForms] Strategy 2 (me/accounts): ${pages.length} páginas`);
         } catch (e) {
@@ -723,9 +697,9 @@ export const getLeadForms = async (adAccountId = null) => {
             // Build page objects from extracted page IDs (or fetch forms directly if no page access)
             for (const pageId of pageIds) {
                 try {
-                    const pageInfo = await fetchMeta(pageId, { fields: 'id,name,access_token' });
+                    const pageInfo = await fetchMeta(pageId, { fields: 'id,name' });
                     if (pageInfo.id) {
-                        pages.push({ id: pageInfo.id, name: pageInfo.name, access_token: pageInfo.access_token, src: 'campaign' });
+                        pages.push({ id: pageInfo.id, name: pageInfo.name, src: 'campaign' });
                     }
                 } catch (e) {
                     console.warn(`[getLeadForms] page ${pageId} info falhou:`, e.message);
@@ -795,17 +769,15 @@ export const getLeadForms = async (adAccountId = null) => {
     // ── Fetch lead forms from each page ──────────────────────────────────────
     for (const page of uniquePages) {
         try {
-            const token = page.access_token;
             const formsData = await fetchMeta(`${page.id}/leadgen_forms`, {
                 fields: 'id,name,leads_count,created_time,status',
                 limit: 50,
-                access_token: token
             });
             const forms = (formsData.data || []).map(f => ({
                 ...f,
                 pageName: page.name,
                 pageId: page.id,
-                pageToken: page.access_token
+                pageToken: null
             }));
             allForms.push(...forms);
             if (forms.length > 0) {
@@ -924,8 +896,7 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
         console.log(`[syncSocial] ${msg}`);
         if (onLog) onLog(msg);
     };
-    const token = await getGlobalToken();
-    if (!token) { log('❌ Token Meta não encontrado!'); return results; }
+    log('Usando Meta proxy no backend para consultar páginas e Instagram.');
 
     // ── Step 1: Fetch all BM owned pages ─────────────────────────────────────
     let bmPages = [];
@@ -937,14 +908,14 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
         for (const bm of (bizData.data || [])) {
             try {
                 const pagesData = await fetchMeta(`${bm.id}/owned_pages`, {
-                    fields: 'id,name,access_token', limit: 100
+                    fields: 'id,name', limit: 100
                 });
                 bmPages.push(...(pagesData.data || []));
             } catch (e) { /* silent */ }
         }
     } catch (e) {
         try {
-            const acc = await fetchMeta('me/accounts', { fields: 'id,name,access_token', limit: 100 });
+            const acc = await fetchMeta('me/accounts', { fields: 'id,name', limit: 100 });
             bmPages = acc.data || [];
         } catch (e2) { /* silent */ }
     }
@@ -1027,16 +998,13 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
         // Get primary page info
         const primaryPageId = [...pageIds][0];
         let pageName = primaryPageId;
-        let pageToken = '';
         const bmPage = pageMap.get(primaryPageId);
         if (bmPage) {
             pageName = bmPage.name;
-            pageToken = bmPage.access_token || '';
         } else {
             try {
-                const info = await fetchMeta(primaryPageId, { fields: 'id,name,access_token' });
+                const info = await fetchMeta(primaryPageId, { fields: 'id,name' });
                 pageName = info.name || primaryPageId;
-                pageToken = info.access_token || '';
             } catch (e) { /* silent */ }
         }
 
@@ -1067,28 +1035,23 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
 
         // Strategy 2: BM instagram_accounts matched by page
         if (!igId && bmIgAccounts.size > 0) {
-            // Try page's connected IG via page token
-            if (pageToken) {
-                try {
-                    const pageIg = await fetchMeta(`${primaryPageId}/instagram_accounts`, {
-                        fields: 'id,username', access_token: pageToken
-                    });
-                    if (pageIg.data?.[0]) {
-                        igId = pageIg.data[0].id;
-                        igUsername = pageIg.data[0].username || '';
-                        log(`✅ ${client.name}: IG encontrado via page/instagram_accounts → @${igUsername}`);
-                    }
-                } catch (e) { /* silent */ }
-            }
+            try {
+                const pageIg = await fetchMeta(`${primaryPageId}/instagram_accounts`, {
+                    fields: 'id,username'
+                });
+                if (pageIg.data?.[0]) {
+                    igId = pageIg.data[0].id;
+                    igUsername = pageIg.data[0].username || '';
+                    log(`✅ ${client.name}: IG encontrado via page/instagram_accounts → @${igUsername}`);
+                }
+            } catch (e) { /* silent */ }
         }
 
         // Strategy 3: Page's instagram_business_account (original approach)
         if (!igId) {
-            const tokenToUse = pageToken || token;
             try {
                 const igData = await fetchMeta(primaryPageId, {
-                    fields: 'instagram_business_account{id,username,name}',
-                    access_token: tokenToUse
+                    fields: 'instagram_business_account{id,username,name}'
                 });
                 if (igData.instagram_business_account) {
                     igId = igData.instagram_business_account.id;
@@ -1108,7 +1071,7 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
             client_id: client.id,
             facebook_page_id: primaryPageId,
             facebook_page_name: pageName,
-            facebook_page_token: pageToken,
+            facebook_page_token: null,
             instagram_account_id: igId,
             instagram_username: igUsername,
         });

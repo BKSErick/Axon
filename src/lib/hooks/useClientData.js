@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { fetchExtendedOverviewData, fetchUnifiedCampaignsInsights, calculateBusinessMetrics } from '../metricsAggregator';
 import { getAdsWithInsights } from '../meta';
-import { getEngagementAnalytics } from '../metaOrganic';
 
 // --- MOCK DATA GENERATORS ---
 const generateDailyMetrics = (days = 30) => {
@@ -174,45 +173,11 @@ export const useEngagementAnalytics = (clientId) => {
 
         const fetchAnalytics = async () => {
             try {
-                // Get OAuth connection for this client
-                const { data: connections, error: connErr } = await supabase
-                    .from('client_meta_connections')
-                    .select('*')
-                    .eq('client_id', clientId)
-                    .eq('status', 'active')
-                    .limit(1);
-
-                console.log('[EngagementAnalytics] clientId:', clientId);
-                console.log('[EngagementAnalytics] connections:', connections, 'error:', connErr);
-
-                if (!connections || connections.length === 0) {
-                    console.warn('[EngagementAnalytics] No active connection found for client', clientId);
-                    setLoading(false);
-                    return; // No OAuth connection = no organic data
-                }
-
-                const conn = connections[0];
-                const token = conn.page_access_token || conn.access_token;
-                const igAccounts = conn.instagram_accounts || [];
-                const pages = conn.pages || [];
-                const igId = conn.instagram_business_id || igAccounts[0]?.id || conn.metadata?.instagram_business_id;
-                const pageId = conn.page_id || pages[0]?.id || conn.metadata?.page_id;
-
-                console.log('[EngagementAnalytics] token exists:', !!token);
-                console.log('[EngagementAnalytics] igId:', igId, 'pageId:', pageId);
-                console.log('[EngagementAnalytics] conn keys:', Object.keys(conn));
-                console.log('[EngagementAnalytics] ig_accounts:', igAccounts);
-                console.log('[EngagementAnalytics] pages:', pages);
-
-                if (!token || (!igId && !pageId)) {
-                    console.warn('[EngagementAnalytics] Missing token or IDs', { token: !!token, igId, pageId });
-                    setLoading(false);
-                    return;
-                }
-
-                const analytics = await getEngagementAnalytics(igId, pageId, token);
-                console.log('[EngagementAnalytics] Result:', analytics ? 'OK' : 'null');
-                if (analytics) setData(analytics);
+                const { data: result, error: fnError } = await supabase.functions.invoke('meta-organic-analytics', {
+                    body: { clientId },
+                });
+                if (fnError) throw fnError;
+                if (result?.data) setData(result.data);
             } catch (e) {
                 console.error('[useEngagementAnalytics] Error:', e);
                 setError(e.message);
