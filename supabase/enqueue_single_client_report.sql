@@ -1,51 +1,58 @@
--- ===============================================
 -- RPC: enqueue_single_client_report
--- Enfileira relatório para UM cliente específico
--- ===============================================
+-- Enqueues one client report. Runs as invoker and depends on admin RLS policies.
 
-CREATE OR REPLACE FUNCTION public.enqueue_single_client_report(p_client_id UUID)
-RETURNS JSON
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions
-AS $$
-DECLARE
-    v_caller_role TEXT;
-    v_agency_name TEXT;
-    v_client_name TEXT;
-    v_whatsapp TEXT;
-    v_today DATE := CURRENT_DATE;
-BEGIN
-    -- 1. Verificar que é admin e pegar agency_name
-    SELECT role, agency_name INTO v_caller_role, v_agency_name FROM profiles WHERE id = auth.uid();
-    IF v_caller_role IS NULL OR v_caller_role != 'admin' THEN
-        RETURN json_build_object('error', 'Apenas administradores podem disparar relatórios');
-    END IF;
-    v_agency_name := COALESCE(v_agency_name, 'Backstage Grow');
+create or replace function public.enqueue_single_client_report(p_client_id uuid)
+returns json
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+    v_caller_role text;
+    v_agency_name text;
+    v_client_name text;
+    v_whatsapp text;
+    v_today date := current_date;
+begin
+    select role, agency_name
+      into v_caller_role, v_agency_name
+    from public.profiles
+    where id = auth.uid();
 
-    -- 2. Verificar que o cliente existe
-    SELECT name INTO v_client_name FROM clients WHERE id = p_client_id;
-    IF v_client_name IS NULL THEN
-        RETURN json_build_object('error', 'Cliente não encontrado');
-    END IF;
+    if v_caller_role is null or v_caller_role != 'admin' then
+        return json_build_object('error', 'Apenas administradores podem disparar relatorios');
+    end if;
 
-    -- 3. Buscar WhatsApp do client_notification_prefs OU da tabela clients
-    SELECT cnp.whatsapp_number INTO v_whatsapp
-    FROM client_notification_prefs cnp
-    WHERE cnp.client_id = p_client_id AND cnp.is_active = true;
+    v_agency_name := coalesce(v_agency_name, 'Backstage Grow');
 
-    -- Fallback: buscar phone da tabela clients
-    IF v_whatsapp IS NULL OR v_whatsapp = '' THEN
-        SELECT phone INTO v_whatsapp FROM clients WHERE id = p_client_id;
-    END IF;
+    select name
+      into v_client_name
+    from public.clients
+    where id = p_client_id;
 
-    IF v_whatsapp IS NULL OR v_whatsapp = '' THEN
-        RETURN json_build_object('error', 'Cliente "' || v_client_name || '" não tem WhatsApp cadastrado');
-    END IF;
+    if v_client_name is null then
+        return json_build_object('error', 'Cliente nao encontrado');
+    end if;
 
-    -- 4. Inserir na fila
-    INSERT INTO notification_queue (client_id, type, scheduled_for, payload, status, attempts)
-    VALUES (
+    select cnp.whatsapp_number
+      into v_whatsapp
+    from public.client_notification_prefs cnp
+    where cnp.client_id = p_client_id
+      and cnp.is_active = true;
+
+    if v_whatsapp is null or v_whatsapp = '' then
+        select phone
+          into v_whatsapp
+        from public.clients
+        where id = p_client_id;
+    end if;
+
+    if v_whatsapp is null or v_whatsapp = '' then
+        return json_build_object('error', 'Cliente "' || v_client_name || '" nao tem WhatsApp cadastrado');
+    end if;
+
+    insert into public.notification_queue (client_id, type, scheduled_for, payload, status, attempts)
+    values (
         p_client_id,
         'manual_report',
         v_today,
@@ -53,17 +60,17 @@ BEGIN
         'pending',
         0
     )
-    ON CONFLICT (client_id, type, scheduled_for) DO UPDATE
-    SET status = 'pending',
+    on conflict (client_id, type, scheduled_for) do update
+    set status = 'pending',
         attempts = 0,
         payload = jsonb_build_object('whatsapp_number', v_whatsapp, 'agency_name', v_agency_name),
-        updated_at = NOW();
+        updated_at = now();
 
-    RETURN json_build_object(
+    return json_build_object(
         'success', true,
-        'message', 'Relatório de "' || v_client_name || '" enfileirado com sucesso! O Worker processará em instantes.'
+        'message', 'Relatorio de "' || v_client_name || '" enfileirado com sucesso! O Worker processara em instantes.'
     );
-END;
+end;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.enqueue_single_client_report(UUID) TO authenticated;
+grant execute on function public.enqueue_single_client_report(uuid) to authenticated;

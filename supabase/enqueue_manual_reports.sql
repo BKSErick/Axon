@@ -1,50 +1,46 @@
--- ===============================================
 -- RPC: enqueue_manual_reports
--- Substitui o send_whatsapp_reports
--- Enfileira todos os clientes ativos na notification_queue
--- O Worker (Edge Function) processa automaticamente
--- ===============================================
+-- Enqueues all active clients into notification_queue.
+-- Runs as invoker; admin authorization is enforced by RLS and the role check below.
 
--- Garantir que o type 'manual_report' é aceito na fila
-ALTER TABLE public.notification_queue DROP CONSTRAINT IF EXISTS notification_queue_type_check;
-ALTER TABLE public.notification_queue ADD CONSTRAINT notification_queue_type_check 
-  CHECK (type IN ('daily_report', 'weekly_report', 'performance_alert', 'daily_report_test', 'real_performance_report', 'manual_report'));
+alter table public.notification_queue drop constraint if exists notification_queue_type_check;
+alter table public.notification_queue add constraint notification_queue_type_check
+  check (type in ('daily_report', 'weekly_report', 'performance_alert', 'daily_report_test', 'real_performance_report', 'manual_report'));
 
-CREATE OR REPLACE FUNCTION public.enqueue_manual_reports()
-RETURNS JSON
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions
-AS $$
-DECLARE
-    v_caller_role TEXT;
-    v_agency_name TEXT;
-    v_pref RECORD;
-    v_queued_count INT := 0;
-    v_skipped_count INT := 0;
-    v_today DATE := CURRENT_DATE;
-BEGIN
-    -- 1. Verificar que é admin e pegar o agency_name do admin que disparou
-    SELECT role, agency_name INTO v_caller_role, v_agency_name FROM profiles WHERE id = auth.uid();
-    IF v_caller_role IS NULL OR v_caller_role != 'admin' THEN
-        RETURN json_build_object('error', 'Apenas administradores podem disparar relatórios');
-    END IF;
+create or replace function public.enqueue_manual_reports()
+returns json
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+    v_caller_role text;
+    v_agency_name text;
+    v_pref record;
+    v_queued_count int := 0;
+    v_skipped_count int := 0;
+    v_today date := current_date;
+begin
+    select role, agency_name
+      into v_caller_role, v_agency_name
+    from public.profiles
+    where id = auth.uid();
 
-    -- Fallback se agency_name estiver vazio
-    v_agency_name := COALESCE(v_agency_name, 'Backstage Grow');
+    if v_caller_role is null or v_caller_role != 'admin' then
+        return json_build_object('error', 'Apenas administradores podem disparar relatorios');
+    end if;
 
-    -- 2. Loop por todos os clientes com notificação ativa
-    FOR v_pref IN
-        SELECT cnp.client_id, cnp.whatsapp_number, cnp.report_frequency
-        FROM client_notification_prefs cnp
-        WHERE cnp.is_active = true
-        AND cnp.whatsapp_number IS NOT NULL
-        AND cnp.whatsapp_number != ''
-    LOOP
-        -- 3. Tentar inserir na fila (ON CONFLICT DO NOTHING = anti-spam)
-        BEGIN
-            INSERT INTO notification_queue (client_id, type, scheduled_for, payload, status, attempts)
-            VALUES (
+    v_agency_name := coalesce(v_agency_name, 'Backstage Grow');
+
+    for v_pref in
+        select cnp.client_id, cnp.whatsapp_number, cnp.report_frequency
+        from public.client_notification_prefs cnp
+        where cnp.is_active = true
+          and cnp.whatsapp_number is not null
+          and cnp.whatsapp_number != ''
+    loop
+        begin
+            insert into public.notification_queue (client_id, type, scheduled_for, payload, status, attempts)
+            values (
                 v_pref.client_id,
                 'manual_report',
                 v_today,
@@ -53,19 +49,20 @@ BEGIN
                 0
             );
             v_queued_count := v_queued_count + 1;
-        EXCEPTION WHEN unique_violation THEN
-            -- Já foi enfileirado hoje, pular (anti-spam)
+        exception when unique_violation then
             v_skipped_count := v_skipped_count + 1;
-        END;
-    END LOOP;
+        end;
+    end loop;
 
-    RETURN json_build_object(
+    return json_build_object(
         'success', true,
         'queued', v_queued_count,
         'skipped', v_skipped_count,
-        'message', v_queued_count || ' relatório(s) enfileirado(s)! ' ||
-                   CASE WHEN v_skipped_count > 0 THEN v_skipped_count || ' já estava(m) na fila.' ELSE '' END ||
+        'message', v_queued_count || ' relatorio(s) enfileirado(s)! ' ||
+                   case when v_skipped_count > 0 then v_skipped_count || ' ja estava(m) na fila.' else '' end ||
                    ' O worker vai processar em instantes.'
     );
-END;
+end;
 $$;
+
+grant execute on function public.enqueue_manual_reports() to authenticated;
