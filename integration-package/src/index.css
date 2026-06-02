@@ -462,6 +462,35 @@ svg.ico {
 .tbl .right { text-align: right; }
 .tbl .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .tbl .mono-id { font-family: var(--font-mono); font-size: 11px; color: rgb(var(--text-3)); }
+.tbl-row {
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  min-height: var(--row-h);
+  border-bottom: 1px solid rgb(var(--border-soft));
+}
+.tbl-row:last-child { border-bottom: 0; }
+.tbl-row:hover:not(.tbl-head) { background: rgba(var(--accent-rgb), 0.03); }
+.tbl-head {
+  min-height: 36px;
+  background: rgb(var(--bg-card-2));
+  color: rgb(var(--text-3));
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tbl-row:has(> :nth-child(7)) {
+  grid-template-columns: minmax(280px, 2fr) minmax(120px, 1fr) repeat(4, minmax(80px, 0.7fr)) minmax(90px, 0.7fr);
+}
+.tbl-row:has(> :nth-child(6)):not(:has(> :nth-child(7))) {
+  grid-template-columns: minmax(240px, 1.5fr) minmax(120px, 1fr) minmax(150px, 1.1fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(64px, 0.4fr);
+}
+.tbl-row:has(> :nth-child(5)):not(:has(> :nth-child(6))) {
+  grid-template-columns: minmax(240px, 1.8fr) minmax(100px, 0.7fr) minmax(72px, 0.5fr) minmax(72px, 0.5fr) minmax(150px, 0.8fr);
+}
+.ta-r { text-align: right; justify-self: end; }
 
 /* ---------- Forms ---------- */
 .input, .select {
