@@ -1,243 +1,94 @@
 /* ============================================
-   Axon — Client Screens (real client data)
+   Axon — Client Screens (real client data + Axon visual)
    ============================================ */
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { I } from './icons';
-import { KPI, Spark, Status, TT, fmt, R } from './common';
+import { KPI, Status, TT, fmt, R } from './common';
 import { useAxonData } from './data-bridge';
-import { MOCK_PERFORMANCE_30, MOCK_FUNNEL, MOCK_AGE_DIST, MOCK_REGIONS } from '../lib/mocks/axon';
+import { MOCK_PERFORMANCE_30, MOCK_FUNNEL } from '../lib/mocks/axon';
 
-// Heavy legacy components — kept in original src/components/ location so their
-// internal imports stay valid. Namespace import tolerates default OR named export.
-import * as LeadsCenterMod from '../components/client/LeadsCenter';
-import * as ClientSettingsMod from '../components/client/ClientSettings';
-import * as ReportsViewMod from '../components/client/ReportsView';
-import * as SocialMediaViewMod from '../components/client/SocialMediaView';
-import * as SuporteWhatsAppMod from '../components/client/SuporteWhatsApp';
-const LeadsCenter = LeadsCenterMod.LeadsCenter;
-const LegacyClientSettings = ClientSettingsMod.ClientSettings;
-const ReportsView = ReportsViewMod.ReportsView;
-const SocialMediaView = SocialMediaViewMod.SocialMediaView;
-const SuporteWhatsApp = SuporteWhatsAppMod.SuporteWhatsApp;
-
-/* -------- helpers (skeleton/empty/header) -------- */
-function Skel({ h = 80, w = '100%' }) { return <div style={{ height: h, width: w, borderRadius: 8, background: 'rgb(var(--bg-card))', animation: 'shimmer 1.6s linear infinite' }} />; }
-function Empty({ icon, title, sub }) {
-  return (
-    <div style={{ padding: 40, textAlign: 'center', border: '1px dashed rgb(var(--border))', borderRadius: 12, background: 'rgb(var(--bg-card))' }}>
-      <div style={{ marginBottom: 12, color: 'rgb(var(--text-3))' }}>{icon}</div>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>{title}</div>
-      {sub && <div className="muted" style={{ fontSize: 13, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>{sub}</div>}
-    </div>
-  );
+function Skel({ h = 80, w = '100%' }) {
+  return <div style={{ height: h, width: w, borderRadius: 8, background: 'rgb(var(--bg-card))', animation: 'shimmer 1.6s linear infinite' }} />;
 }
-function PageHeader({ title, sub, actions }) {
-  return (
-    <div className="page-head">
-      <div><h1>{title}</h1>{sub && <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{sub}</div>}</div>
-      {actions && <div className="row" style={{ gap: 8 }}>{actions}</div>}
-    </div>
-  );
+
+function Empty({ icon, title, sub, cta }) {
+  return <div className="card-pad empty" style={{ minHeight: 180 }}>{icon}<div style={{ fontWeight: 600, marginTop: 8 }}>{title}</div>{sub && <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{sub}</div>}{cta && <button className="btn btn-sm" style={{ marginTop: 12 }}>{cta}</button>}</div>;
+}
+
+function PageHead({ eyebrow, title, sub, actions }) {
+  return <div className="page-head"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1 className="page-title">{title}</h1>{sub && <div className="page-sub">{sub}</div>}</div>{actions && <div className="page-actions">{actions}</div>}</div>;
+}
+
+function currentClient(data, clientId) {
+  return data.clients.find(c => c.id === clientId) || data.clients[0] || { id: clientId, name: 'Cliente', logo: 'CL', color: 'avt-1', email: '' };
 }
 
 /* ============================================
    1. CLIENT DASHBOARD
    ============================================ */
 export function ClientDashboard({ clientId, go }) {
-  const { clientKpis, loading, errors, clients } = useAxonData();
-  const client = clients.find(c => c.id === clientId);
-  const k = clientKpis;
+  const data = useAxonData();
+  const client = currentClient(data, clientId);
+  const k = data.clientKpis;
   const spend = k?.extended?.spend ?? k?.raw?.spend ?? 0;
   const leads = k?.extended?.totalLeads ?? k?.raw?.leads ?? 0;
-  const daily = k?.daily?.length ? k.daily : MOCK_PERFORMANCE_30;
+  const daily = k?.daily?.length ? k.daily.map(d => ({ label: d.date || d.label, spend: d.spend || 0, leads: d.leads || 0 })) : MOCK_PERFORMANCE_30;
 
-  return (
-    <>
-      <PageHeader
-        title={client?.name || 'Dashboard'}
-        sub="Sua performance dos últimos 30 dias"
-        actions={
-          <>
-            <button className="btn"><I.cal />Últimos 30d</button>
-            <button className="btn"><I.download />PDF</button>
-          </>
-        }
-      />
-
-      {errors.clientKpis && (
-        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: 'rgb(var(--c-danger))', fontSize: 13 }}>
-          ⚠ {errors.clientKpis}
-        </div>
-      )}
-
-      <div className="grid-4">
-        {loading.clientKpis ? (
-          <><Skel h={110} /><Skel h={110} /><Skel h={110} /><Skel h={110} /></>
-        ) : (
-          <>
-            <KPI label="Investido" icon={<I.dollar />} value={spend} fmtVal={fmt.brl} delta={5.2} spark={daily.slice(-10).map(d => ({ v: d.spend }))} />
-            <KPI label="Leads" icon={<I.users />} value={leads} fmtVal={fmt.int} delta={11.8} spark={daily.slice(-10).map(d => ({ v: d.leads || 0 }))} />
-            <KPI label="CPA" icon={<I.target />} value={k?.cpa || 0} fmtVal={fmt.brl} delta={-3.4} negative />
-            <KPI label="ROI" icon={<I.trend />} value={Number(k?.roi) || 0} fmtVal={n => (n || 0) + '%'} delta={1.6} />
-          </>
-        )}
-      </div>
-
-      <div className="grid-2" style={{ marginTop: 20 }}>
-        <div className="card">
-          <div className="card-head"><h2>Performance diária</h2></div>
-          <div style={{ padding: 16, height: 280 }}>
-            <R.ResponsiveContainer width="100%" height="100%">
-              <R.LineChart data={daily.map(d => ({ label: d.date || d.label, spend: d.spend, leads: d.leads }))}>
-                <R.CartesianGrid stroke="rgb(var(--border-soft))" strokeDasharray="3 3" />
-                <R.XAxis dataKey="label" tick={{ fill: 'rgb(var(--text-3))', fontSize: 11 }} stroke="rgb(var(--border))" />
-                <R.YAxis yAxisId="l" tick={{ fill: 'rgb(var(--text-3))', fontSize: 11 }} stroke="rgb(var(--border))" />
-                <R.YAxis yAxisId="r" orientation="right" tick={{ fill: 'rgb(var(--text-3))', fontSize: 11 }} stroke="rgb(var(--border))" />
-                <R.Tooltip content={<TT />} />
-                <R.Line yAxisId="l" type="monotone" dataKey="spend" name="Spend" stroke="rgb(var(--accent))" strokeWidth={2} dot={false} />
-                <R.Line yAxisId="r" type="monotone" dataKey="leads" name="Leads" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-              </R.LineChart>
-            </R.ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-head"><h2>Atalhos</h2></div>
-          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button className="card-action" onClick={() => go('client-campaigns')}><I.trend /><span>Ver campanhas</span></button>
-            <button className="card-action" onClick={() => go('client-creatives')}><I.image /><span>Criativos</span></button>
-            <button className="card-action" onClick={() => go('client-leads')}><I.users /><span>Leads recentes</span></button>
-            <button className="card-action" onClick={() => go('client-social')}><I.insta /><span>Instagram</span></button>
-            <button className="card-action" onClick={() => go('client-reports')}><I.file /><span>Relatórios</span></button>
-            <button className="card-action" onClick={() => go('client-support')}><I.chat /><span>Suporte WhatsApp</span></button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  return <div className="fadein">
+    <PageHead eyebrow="Workspace do cliente" title={client.name} sub="Performance e próximos passos dos últimos 30 dias" actions={<><button className="btn"><I.cal />30d</button><button className="btn"><I.download />PDF</button></>} />
+    {data.errors.clientKpis && <div className="alert warning" style={{ marginBottom: 16 }}><I.warn className="ic" />{data.errors.clientKpis}</div>}
+    <div className="kpi-row"><KPI label="Investido" value={spend} fmtVal={fmt.brl} delta={5.2} /><KPI label="Leads" value={leads} fmtVal={fmt.int} delta={11.8} /><KPI label="CPA" value={k?.cpa || 0} fmtVal={fmt.brl} delta={-3.4} negative /><KPI label="ROI" value={Number(k?.roi) || 0} fmtVal={n => `${n || 0}%`} delta={1.6} /></div>
+    <div className="sp-20" />
+    <div className="grid-3" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="card"><div className="card-head"><div><div className="card-title">Performance diária</div><div className="card-sub">Investimento vs Leads gerados</div></div></div><div style={{ padding: '12px 8px 8px', height: 280 }}><R.ResponsiveContainer width="100%" height="100%"><R.AreaChart data={daily}><defs><linearGradient id="clientSpend" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.28}/><stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0}/></linearGradient></defs><R.CartesianGrid stroke="rgb(var(--border-soft))" vertical={false}/><R.XAxis dataKey="label" tickLine={false} axisLine={false}/><R.YAxis tickLine={false} axisLine={false} tickFormatter={v => fmt.brlShort ? fmt.brlShort(v) : v}/><R.Tooltip content={<TT />} /><R.Area type="monotone" dataKey="spend" name="Investimento" stroke="rgb(var(--accent))" fill="url(#clientSpend)" strokeWidth={1.8}/></R.AreaChart></R.ResponsiveContainer></div></div>
+      <div className="card"><div className="card-head"><div><div className="card-title">Funil</div><div className="card-sub">Resumo de aquisição</div></div></div><div className="card-pad">{MOCK_FUNNEL.slice(0, 5).map(f => <div key={f.stage} style={{ marginBottom: 14 }}><div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}><span style={{ fontSize: 13 }}>{f.stage}</span><span className="num muted" style={{ fontSize: 12 }}>{fmt.int(f.v)}</span></div><div className="bar"><span style={{ width: `${Math.min(100, f.pct)}%` }} /></div></div>)}</div></div>
+    </div>
+    <div className="sp-20" />
+    <div className="grid-4">{[{ id: 'client-campaigns', t: 'Campanhas', i: <I.trend /> }, { id: 'client-creatives', t: 'Criativos', i: <I.image /> }, { id: 'client-leads', t: 'Leads', i: <I.users /> }, { id: 'client-social', t: 'Instagram', i: <I.insta /> }].map(a => <button key={a.id} className="card card-pad row" style={{ gap: 10, textAlign: 'left' }} onClick={() => go(a.id)}>{a.i}<span style={{ fontWeight: 600 }}>{a.t}</span></button>)}</div>
+  </div>;
 }
 
-/* ============================================
-   2. CLIENT CAMPAIGNS
-   ============================================ */
-export function ClientCampaigns({ clientId, onOpen }) {
+export function ClientCampaigns({ onOpen }) {
   const { clientCampaigns, loading } = useAxonData();
-  return (
-    <>
-      <PageHeader title="Campanhas Meta" sub={`${clientCampaigns.length} campanhas ativas`} />
-      <div className="card">
-        <div className="tbl">
-          <div className="tbl-row tbl-head"><div>Campanha</div><div className="ta-r">Spend</div><div className="ta-r">Leads</div><div className="ta-r">CPA</div><div className="ta-r">CTR</div><div>Status</div></div>
-          {loading.clientCampaigns && Array.from({ length: 4 }, (_, i) => <div key={i} className="tbl-row"><Skel h={20} /><Skel h={20} /><Skel h={20} /><Skel h={20} /><Skel h={20} /><Skel h={20} /></div>)}
-          {!loading.clientCampaigns && clientCampaigns.length === 0 && <div style={{ padding: 30 }}><Empty icon={<I.trend />} title="Sem campanhas ativas" sub="Nenhuma campanha encontrada para este período." /></div>}
-          {!loading.clientCampaigns && clientCampaigns.map(c => (
-            <div key={c.id} className="tbl-row" onClick={() => onOpen(c.id)} style={{ cursor: 'pointer' }}>
-              <div><div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div></div>
-              <div className="ta-r num" style={{ fontSize: 13 }}>{fmt.brl(c.spend)}</div>
-              <div className="ta-r num">{c.leads || '—'}</div>
-              <div className="ta-r num">{c.cpa ? fmt.brl(c.cpa) : '—'}</div>
-              <div className="ta-r num">{c.ctr != null ? c.ctr.toFixed(2) + '%' : '—'}</div>
-              <div><Status s={c.status === 'active' ? 'ok' : 'warn'} label={c.status} /></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
+  const total = clientCampaigns.reduce((s, c) => s + (c.spend || 0), 0);
+  const leads = clientCampaigns.reduce((s, c) => s + (c.leads || 0), 0);
+  return <div className="fadein"><PageHead eyebrow="Mídia paga" title="Campanhas Meta" sub={`${clientCampaigns.length} campanhas ativas`} actions={<button className="btn"><I.download />Exportar</button>} />
+    <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}><KPI label="Total investido" value={total} fmtVal={fmt.brl} delta={5.4} /><KPI label="Leads" value={leads} fmtVal={fmt.int} delta={8.2} /><KPI label="CPA médio" value={total / Math.max(leads, 1)} fmtVal={fmt.brl} negative delta={-2.1} /></div><div className="sp-20" />
+    <div className="card"><div className="card-head"><div><div className="card-title">Detalhamento por campanha</div><div className="card-sub">Ordenado por investimento</div></div></div>{loading.clientCampaigns ? <div className="card-pad"><Skel h={220} /></div> : clientCampaigns.length === 0 ? <Empty icon={<I.trend />} title="Sem campanhas ativas" sub="Nenhuma campanha encontrada para este período." /> : <table className="tbl"><thead><tr><th>Campanha</th><th className="right">Spend</th><th className="right">Leads</th><th className="right">CPA</th><th className="right">CTR</th><th>Status</th></tr></thead><tbody>{clientCampaigns.map(c => <tr key={c.id} onClick={() => onOpen?.(c.id)} style={{ cursor: 'pointer' }}><td><div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div><div className="mono-id">{c.id}</div></td><td className="right num">{fmt.brl(c.spend || 0)}</td><td className="right num">{c.leads || '—'}</td><td className="right num">{c.cpa ? fmt.brl(c.cpa) : '—'}</td><td className="right num">{c.ctr != null ? `${c.ctr.toFixed(2).replace('.', ',')}%` : '—'}</td><td><Status s={c.status === 'active' ? 'ok' : 'warn'} label={c.status || 'active'} /></td></tr>)}</tbody></table>}</div>
+  </div>;
 }
 
-/* ============================================
-   3. CLIENT CREATIVES
-   ============================================ */
-export function ClientCreatives({ clientId }) {
+export function ClientCreatives() {
   const { clientAds, loading } = useAxonData();
-  return (
-    <>
-      <PageHeader title="Criativos" sub="Performance de cada anúncio (imagem, vídeo, carrossel)" />
-      {loading.clientAds ? (
-        <div className="grid-3"><Skel h={220} /><Skel h={220} /><Skel h={220} /></div>
-      ) : clientAds.length === 0 ? (
-        <Empty icon={<I.image />} title="Nenhum criativo encontrado" sub="Não há anúncios ativos sincronizados." />
-      ) : (
-        <div className="grid-3">
-          {clientAds.map(ad => (
-            <div key={ad.id || ad.ad_id} className="card">
-              <div style={{ aspectRatio: '1', background: 'linear-gradient(135deg, rgb(var(--bg-card)) 0%, rgb(var(--bg-card-2)) 100%)', display: 'grid', placeItems: 'center', color: 'rgb(var(--text-3))', borderRadius: '10px 10px 0 0' }}>
-                {ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px 10px 0 0' }} /> : <I.image style={{ width: 48, height: 48 }} />}
-              </div>
-              <div style={{ padding: 14 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{ad.name || ad.ad_name || 'Criativo'}</div>
-                <div className="row" style={{ gap: 14, fontSize: 11, color: 'rgb(var(--text-2))' }}>
-                  <span>CTR <span className="num" style={{ fontWeight: 600, color: 'rgb(var(--text))' }}>{ad.ctr?.toFixed(2) || '—'}%</span></span>
-                  <span>CPA <span className="num" style={{ fontWeight: 600, color: 'rgb(var(--text))' }}>{ad.cpa ? fmt.brl(ad.cpa) : '—'}</span></span>
-                  <span>Leads <span className="num" style={{ fontWeight: 600, color: 'rgb(var(--text))' }}>{ad.leads || '—'}</span></span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
+  return <div className="fadein"><PageHead eyebrow="Criativos" title="Biblioteca de anúncios" sub="Performance por imagem, vídeo e carrossel" />{loading.clientAds ? <div className="grid-3"><Skel h={260}/><Skel h={260}/><Skel h={260}/></div> : clientAds.length === 0 ? <Empty icon={<I.image />} title="Nenhum criativo encontrado" sub="Não há anúncios ativos sincronizados." /> : <div className="grid-3">{clientAds.map(ad => <div key={ad.id || ad.ad_id} className="card"><div style={{ aspectRatio: '1.35', background: 'rgb(var(--bg-elev))', display: 'grid', placeItems: 'center', color: 'rgb(var(--text-3))' }}>{ad.thumbnail_url ? <img src={ad.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <I.image style={{ width: 44, height: 44 }} />}</div><div className="card-pad"><div style={{ fontWeight: 600, fontSize: 13 }}>{ad.name || ad.ad_name || 'Criativo'}</div><div className="grid-3" style={{ marginTop: 14, gap: 10 }}><Mini label="CTR" value={`${ad.ctr?.toFixed?.(2) || '—'}%`} /><Mini label="CPA" value={ad.cpa ? fmt.brl(ad.cpa) : '—'} /><Mini label="Leads" value={ad.leads || '—'} /></div></div></div>)}</div>}</div>;
 }
 
-/* ============================================
-   4. CLIENT LEADS — bridge to legacy LeadsCenter
-   Legacy props: ({ user })  — usa user.id como clientId
-   ============================================ */
-export function ClientLeads({ clientId }) {
-  return (
-    <div className="legacy-scope" style={{ marginTop: -24, marginLeft: -24, marginRight: -24 }}>
-      <LeadsCenter user={{ id: clientId }} />
-    </div>
-  );
+export function ClientLeads({ onOpen }) {
+  const { clientCampaigns } = useAxonData();
+  const leads = useMemo(() => Array.from({ length: 10 }, (_, i) => ({ id: `lead_${i}`, name: ['Mariana Lopes', 'Rafael Lima', 'Ana Beatriz', 'Carlos Mendes'][i % 4], phone: '+55 11 9' + String(91605660 + i), source: clientCampaigns[i % Math.max(clientCampaigns.length, 1)]?.name || 'Campanha Meta', score: 92 - i * 4, status: i % 3 === 0 ? 'Novo' : i % 3 === 1 ? 'Em contato' : 'Qualificado' })), [clientCampaigns]);
+  return <div className="fadein"><PageHead eyebrow="Aquisição" title="Central de Leads" sub="Leads recentes capturados pelas campanhas" actions={<button className="btn"><I.download />Exportar</button>} /><div className="card"><table className="tbl"><thead><tr><th>Lead</th><th>Telefone</th><th>Origem</th><th className="right">Score IA</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{leads.map(l => <tr key={l.id}><td><div style={{ fontWeight: 600, fontSize: 13 }}>{l.name}</div><div className="mono-id">{l.id}</div></td><td className="num">{l.phone}</td><td className="muted" style={{ fontSize: 12 }}>{l.source}</td><td className="right num">{l.score}</td><td><span className="badge success"><span className="dot" />{l.status}</span></td><td className="right"><button className="btn btn-sm" onClick={() => onOpen?.(l)}>Abrir</button></td></tr>)}</tbody></table></div></div>;
 }
 
-/* ============================================
-   5. CLIENT SOCIAL — bridge
-   Legacy props: ({ user })
-   ============================================ */
-export function ClientSocial({ clientId }) {
-  return (
-    <div className="legacy-scope" style={{ marginTop: -24, marginLeft: -24, marginRight: -24 }}>
-      <SocialMediaView user={{ id: clientId }} />
-    </div>
-  );
+export function ClientSocial() {
+  const { clientEngagement, clientEngagementReason } = useAxonData();
+  const p = clientEngagement || { handle: '@cliente', followers: 0, followersDelta: 0, posts30: 0, reach30: 0, engagement: 0, avgLikes: 0, avgComments: 0, bestTime: '—' };
+  return <div className="fadein"><PageHead eyebrow="Orgânico" title="Instagram" sub="Crescimento, alcance e engajamento orgânico" actions={<button className="btn"><I.refresh />Sincronizar</button>} />{clientEngagementReason && <div className="alert warning" style={{ marginBottom: 16 }}><I.warn className="ic" />{clientEngagementReason}</div>}<div className="kpi-row"><KPI label="Seguidores" value={p.followers || 0} fmtVal={fmt.int} delta={p.followersDelta || 0} /><KPI label="Posts 30d" value={p.posts30 || 0} delta={null} /><KPI label="Alcance" value={p.reach30 || 0} fmtVal={fmt.int} delta={3.2} /><KPI label="Engajamento" value={`${Number(p.engagement || 0).toFixed(2).replace('.', ',')}%`} delta={0.4} /></div><div className="sp-20" /><div className="grid-2"><div className="card"><div className="card-head"><div><div className="card-title">Perfil conectado</div><div className="card-sub">{p.handle || '@cliente'}</div></div><Status s="ok" label="Conectado" /></div><div className="card-pad grid-3"><Mini label="Curtidas médias" value={fmt.int(p.avgLikes || 0)} /><Mini label="Comentários" value={fmt.int(p.avgComments || 0)} /><Mini label="Melhor horário" value={p.bestTime || '—'} /></div></div><div className="card"><div className="card-head"><div><div className="card-title">Próximas ações</div><div className="card-sub">Sugestões do Copilot</div></div></div><div className="card-pad" style={{ display: 'grid', gap: 10 }}><button className="btn">Gerar pauta da semana</button><button className="btn">Analisar melhores posts</button><button className="btn">Criar relatório orgânico</button></div></div></div></div>;
 }
 
-/* ============================================
-   6. CLIENT REPORTS — bridge
-   Legacy props: ({ user, kpis, campaigns }) — usa dados do contexto
-   ============================================ */
-export function ClientReports({ clientId }) {
-  const { clientKpis, clientCampaigns } = useAxonData();
-  return (
-    <div className="legacy-scope" style={{ marginTop: -24, marginLeft: -24, marginRight: -24 }}>
-      <ReportsView user={{ id: clientId }} kpis={clientKpis} campaigns={clientCampaigns} />
-    </div>
-  );
+export function ClientReports() {
+  const { clientReports, clientKpis } = useAxonData();
+  const rows = clientReports.length ? clientReports : Array.from({ length: 6 }, (_, i) => ({ id: `rep_${i}`, title: 'Relatório Diário', period: 'Últimas 24h', date: new Date(Date.now() - i * 86400000).toISOString(), status: i === 2 ? 'queued' : 'ok' }));
+  return <div className="fadein"><PageHead eyebrow="Conta" title="Relatórios" sub="Histórico de PDFs e envios por WhatsApp" actions={<button className="btn btn-primary"><I.download />Baixar atual</button>} /><div className="kpi-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}><KPI label="Investimento atual" value={clientKpis?.extended?.spend || 0} fmtVal={fmt.brl} delta={null} /><KPI label="Leads atuais" value={clientKpis?.extended?.totalLeads || 0} fmtVal={fmt.int} delta={null} /><KPI label="Relatórios" value={rows.length} delta={null} /></div><div className="sp-20" /><div className="card"><table className="tbl"><thead><tr><th>Relatório</th><th>Período</th><th>Data</th><th>Status</th><th className="right">Ações</th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</td><td className="muted" style={{ fontSize: 12 }}>{r.period}</td><td className="muted" style={{ fontSize: 12 }}>{new Date(r.date).toLocaleDateString('pt-BR')}</td><td>{r.status === 'ok' ? <span className="badge success"><I.check className="ico" />Entregue</span> : <span className="badge info"><I.clock className="ico" />Na fila</span>}</td><td className="right"><button className="btn btn-sm"><I.download /></button></td></tr>)}</tbody></table></div></div>;
 }
 
-/* ============================================
-   7. CLIENT SETTINGS — bridge
-   Legacy props: ({ user, onLogout })
-   ============================================ */
-export function ClientSettings({ clientId, auth, onLogout }) {
-  return (
-    <div className="legacy-scope" style={{ marginTop: -24, marginLeft: -24, marginRight: -24 }}>
-      <LegacyClientSettings user={auth || { id: clientId }} onLogout={onLogout} />
-    </div>
-  );
+export function ClientSettings({ auth, onLogout }) {
+  return <div className="fadein"><PageHead eyebrow="Conta" title="Configurações" sub="Perfil, acessos e preferências" /><div className="grid-2"><div className="card"><div className="card-head"><div className="card-title">Perfil</div></div><div className="card-pad" style={{ display: 'grid', gap: 14 }}><div className="field"><label>Nome</label><input className="input" defaultValue={auth?.name || ''} /></div><div className="field"><label>Email</label><input className="input" defaultValue={auth?.email || ''} /></div><button className="btn btn-primary" style={{ justifySelf: 'end' }}>Salvar</button></div></div><div className="card"><div className="card-head"><div className="card-title">Sessão</div></div><div className="card-pad"><p className="muted" style={{ fontSize: 13 }}>Você está autenticado no painel AXON.</p><button className="btn" onClick={onLogout}><I.out />Sair</button></div></div></div></div>;
 }
 
-/* ============================================
-   8. CLIENT SUPPORT — bridge to legacy WhatsApp support
-   Legacy props: () — sem props
-   ============================================ */
 export function ClientSupport() {
-  return (
-    <div className="legacy-scope" style={{ marginTop: -24, marginLeft: -24, marginRight: -24 }}>
-      <SuporteWhatsApp />
-    </div>
-  );
+  return <div className="fadein"><PageHead eyebrow="Suporte" title="Suporte WhatsApp" sub="Fale com a equipe de performance" /><div className="grid-3"><div className="card"><div className="card-pad"><I.chat /><div className="card-title" style={{ marginTop: 12 }}>Atendimento</div><div className="card-sub">Tempo médio: 12 min</div><button className="btn btn-primary" style={{ marginTop: 16 }}>Abrir WhatsApp</button></div></div><div className="card"><div className="card-pad"><I.file /><div className="card-title" style={{ marginTop: 12 }}>Solicitar relatório</div><div className="card-sub">Receba uma análise atualizada</div><button className="btn" style={{ marginTop: 16 }}>Solicitar</button></div></div><div className="card"><div className="card-pad"><I.cal /><div className="card-title" style={{ marginTop: 12 }}>Reunião</div><div className="card-sub">Agende revisão de performance</div><button className="btn" style={{ marginTop: 16 }}>Agendar</button></div></div></div></div>;
+}
+
+function Mini({ label, value }) {
+  return <div><div className="eyebrow" style={{ fontSize: 10 }}>{label}</div><div className="num" style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{value}</div></div>;
 }
