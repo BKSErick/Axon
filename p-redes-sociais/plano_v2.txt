@@ -1,0 +1,453 @@
+﻿
+MetaReports
+MÓDULO: GESTÃO DE MÍDIA SOCIAL COM IA
+Plano Técnico de Desenvolvimento · v2.0
+Atualizado: Gemini API + Conformidade Meta Graph API v22
+Março 2026
+
+RESUMO EXECUTIVO
+Versão atualizada do plano técnico do Módulo de Gestão de Mídia Social. As principais mudanças desta versão são: (1) substituição da Claude API pela Gemini API para geração de textos, (2) mapeamento completo de conformidade com a Meta Graph API v22, incluindo permissões, requisitos de App Review e modelo de agendamento por plataforma.
+
+Prazo estimado
+10–14 sem.
+sprints de 2 semanas
+IA de texto
+Gemini
+2.0-flash / 1.5-pro
+Meta API
+v22
+Graph API atual
+App Review
+Urgente
+iniciar imediatamente
+
+1. Visão Geral do Módulo
+O módulo centraliza todo o ciclo de vida de uma publicação: geração por IA (Gemini), curadoria, aprovação, agendamento e análise de desempenho — integrado diretamente ao sidebar do MetaReports.
+
+1.1 Plataformas suportadas — Fase 1
+Plataforma
+Tipos de post
+Publicação automática
+Agendamento
+Facebook
+Feed, Carrossel, Stories, Promoção
+Via API Meta v22
+Nativo (scheduled_publish_time)
+Instagram
+Feed, Carrossel, Stories, Reels
+Via API Meta v22
+Job interno (BullMQ + Redis)
+LinkedIn
+Feed, Artigo
+Fase 2
+Fase 2
+TikTok
+Vídeo, Stories
+Fase 3
+Fase 3
+
+2. Conformidade — Meta Graph API v22
+
+ATENÇÃO
+Esta é a seção mais crítica para o sucesso do projeto. Todos os itens marcados como BLOQUEADOR devem ser resolvidos ANTES do início do desenvolvimento. Alguns processos (App Review, Business Verification) dependem da Meta e podem levar semanas.
+
+2.1 Status do App Meta — o que verificar agora
+Item
+Situação
+Ação necessária
+Prazo est.
+App criado no Meta for Developers
+Confirmado
+Verificar se o tipo é Business (não Consumer)
+Imediato
+Business Verification (CNPJ/site)
+Verificar
+Submeter documentação se ainda não feito
+2–5 dias úteis
+App em modo Live (não Development)
+Verificar
+Em modo Dev só testadores manuais funcionam
+Após B. Verification
+App Review aprovado
+BLOQUEADOR
+Submeter revisão com todas as permissões listadas
+1–4 semanas
+
+2.2 Permissões obrigatórias — solicitar no App Review
+Todas as permissões abaixo devem ser solicitadas juntas no App Review. A Meta analisa o conjunto e pede vídeo demonstrando cada funcionalidade.
+
+Permissão
+Para que serve
+Obrigatoriedade
+Plataforma
+pages_manage_posts
+Publicar, editar e deletar posts em Páginas
+OBRIGATÓRIA
+Facebook
+pages_read_engagement
+Ler dados e métricas da Página (exigida junto com manage_posts)
+OBRIGATÓRIA
+Facebook
+instagram_content_publish
+Publicar Feed, Carrossel, Stories e Reels no Instagram
+OBRIGATÓRIA
+Instagram
+instagram_basic
+Acessar perfil e confirmar ig-user-id dos clientes
+Necessária
+Instagram
+pages_show_list
+Listar páginas que o cliente administra no OAuth
+Necessária
+Facebook
+pages_manage_metadata
+Webhooks de atividade e notificações em tempo real
+Recomendada
+Facebook
+read_insights
+Métricas pós-publicação para análise de horários pela IA
+Para análise
+FB + IG
+
+2.3 Requisitos nas contas dos clientes
+
+PRÉ-REQUISITO POR CLIENTE
+Antes de conectar qualquer cliente ao MetaReports, verificar TODOS os itens abaixo. Uma conta que não atenda a esses requisitos simplesmente não funciona com a Meta Graph API, independente de qualquer configuração do sistema.
+
+FB
+Página do Facebook (não perfil pessoal) Verificar por cliente
+A publicação via API só funciona em Facebook Pages. O cliente deve ser administrador da página, não apenas editor.
+
+IG
+Conta Instagram Business ou Creator OBRIGATÓRIO
+Desde dez/2024 a Meta descontinuou a Basic Display API. Contas pessoais não funcionam mais com a Graph API. Precisa ser Business ou Creator.
+
+↔
+Instagram vinculado à Página do Facebook OBRIGATÓRIO
+Mesmo com conta Business, se o IG não estiver vinculado à Page do FB, a publicação falha. Configurar em: Instagram > Configurações > Conta > Página vinculada.
+
+PPA
+Page Publishing Authorization Verificar cada página
+Algumas páginas exigem PPA — autorização extra da Meta para publicação via API. Verificar em: Configurações da Página > Autorização de Publicação de Conteúdo.
+
+3. Modelo de Agendamento por Plataforma
+Facebook e Instagram têm comportamentos diferentes na API. O dev precisa implementar os dois modelos.
+
+3.1 Facebook — Agendamento nativo via API
+
+COMO FUNCIONA
+O Facebook suporta agendamento diretamente na chamada de publicação. Basta passar published: false e scheduled_publish_time (Unix timestamp UTC) no POST /{page-id}/feed. A Meta publica automaticamente no horário. O tempo mínimo é 10 minutos à frente e máximo 6 meses.
+
+Exemplo de payload para post agendado no Facebook:
+
+POST  /{page-id}/feed
+{ &quot;message&quot;: &quot;Texto do post...&quot;, &quot;published&quot;: false, &quot;scheduled_publish_time&quot;: 1741996800 }
+
+3.2 Instagram — Agendamento via BullMQ
+O Instagram NÃO tem campo scheduled_publish_time. O fluxo é mais longo e controlado pelo sistema:
+
+Criar container de mídia — POST /{ig-user-id}/media com image_url ou video_url, caption e demais campos
+Aguardar status FINISHED — GET /{container-id}?fields=status_code (polling a cada 5s)
+Job BullMQ dispara no horário agendado — o worker executa a publicação
+Publicar — POST /{ig-user-id}/media_publish com creation_id={container-id}
+Registrar resultado — salvar media_id ou erro no banco de dados
+
+IMPORTANTE
+O container de mídia criado no passo 1 expira em 24 horas. Crie o container apenas momentos antes da publicação (até 1 hora antes), não no momento que o post é agendado. O job BullMQ deve criar o container e publicar em sequência.
+
+3.3 Requisitos de mídia por tipo de post
+Tipo
+Formato
+Dimensões
+Tamanho máx.
+Obs.
+Feed (imagem)
+JPEG / PNG
+1080×1080px (quadrado)
+8 MB
+Ratio 1:1 recomendado
+Feed (paisagem)
+JPEG / PNG
+1080×566px
+8 MB
+Ratio 1.91:1
+Carrossel
+JPEG / PNG
+1080×1080px cada
+8 MB/item
+2 a 10 imagens
+Stories
+JPEG / PNG
+1080×1920px
+8 MB
+Ratio 9:16
+Reels
+MP4 (H.264)
+1080×1920px
+1 GB
+Máx. 90s no IG
+
+HOSTING DE MÍDIA
+Toda mídia deve estar hospedada em URL pública (S3 ou Cloudflare R2) no momento da publicação. A Meta faz download da imagem/vídeo diretamente via URL. Não funciona com localhost, URLs com autenticação ou links temporários com expiração curta.
+
+4. Integração — Google Gemini API
+Substituição da Claude API pelo Gemini para geração de textos de posts, variações e análise de briefings.
+
+4.1 Modelos disponíveis e quando usar cada um
+Modelo
+Uso ideal
+Velocidade
+Custo relativo
+gemini-2.0-flash
+Geração de posts únicos, resposta rápida ao usuário
+Muito rápida
+Baixo
+gemini-1.5-pro
+Geração de 3+ variações, briefings longos, análise de histórico
+Média
+Médio
+gemini-1.5-flash
+Fallback econômico para alto volume
+Rápida
+Baixo
+
+4.2 Configuração da API Key
+Acessar aistudio.google.com com conta Google
+Clicar em &apos;Get API Key&apos; → &apos;Create API Key&apos;
+Salvar a chave no arquivo .env como GEMINI_API_KEY=sua_chave_aqui
+Nunca commitar a chave no repositório — adicionar .env ao .gitignore
+
+4.3 Estrutura da chamada — exemplo de código
+const res = await fetch(
+  &quot;https://generativelanguage.googleapis.com/v1beta/models/
+   gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}&quot;,
+  { method: &quot;POST&quot;,
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }]
+    }) })
+
+A resposta vem em: res.candidates[0].content.parts[0].text
+
+4.4 Estrutura do prompt para posts
+O prompt enviado ao Gemini deve sempre incluir contexto completo para gerar textos coerentes:
+
+Identidade do cliente: nome, nicho, público-alvo, tom de voz cadastrado
+Plataforma e tipo de post: Feed IG, Carrossel FB, Stories, etc.
+Tom de voz da solicitação: profissional, descontraído, urgente, etc.
+Briefing preenchido pelo usuário
+Últimos 3–5 posts de melhor desempenho do cliente (contexto histórico)
+Instrução de formato: quantidade de slides se carrossel, duração se Reels, etc.
+Idioma: &quot;Responda apenas em português brasileiro natural&quot;
+
+5. Arquitetura Técnica — Stack Atualizada
+Camada
+Tecnologia
+Observação
+Frontend
+React + TypeScript
+Integrado ao MetaReports existente
+Backend / API
+Node.js + Express ou Next.js API Routes
+Preferir o que já está no projeto
+Banco de dados
+PostgreSQL
+Relacional — posts, agendamentos, histórico, tokens
+Fila de jobs
+BullMQ + Redis
+Agendamento de publicações no Instagram e retries
+IA — Geração de texto
+Google Gemini API (gemini-2.0-flash)
+Substituição da Claude API — troca direta
+Publicação automática
+Meta Graph API v22
+FB + IG — exige App Review aprovado
+Storage de mídia
+AWS S3 ou Cloudflare R2
+URLs públicas permanentes obrigatórias
+Autenticação clientes
+OAuth 2.0 Meta + JWT
+Page Token de longa duração por cliente
+Monitoramento de tokens
+Cron job + alertas
+Verificar expiração e alertar 7 dias antes
+
+5.1 Gestão de Page Tokens — ponto crítico
+
+TOKENS EXPIRAM
+Page Tokens de longa duração duram até 60 dias. O sistema deve: (1) armazenar tokens criptografados com AES-256 no banco, (2) rodar cron job diário verificando a validade, (3) enviar alerta por e-mail/notificação no sistema 7 dias antes do vencimento, (4) oferecer fluxo de re-autenticação OAuth na interface do MetaReports. Tokens expirados resultam em erro #190 na Meta API.
+
+6. Modelo de Banco de Dados
+Tabela
+Campos principais
+Finalidade
+posts
+id, client_id, platform, type, content_text, media_urls[], status, scheduled_at, published_at, meta_post_id, ai_score
+Registro central de todos os posts
+post_variations
+id, post_id, variation_index, content_text, created_at
+Variações geradas pelo Gemini
+post_metrics
+id, post_id, impressions, reach, engagement, clicks, likes, collected_at
+Métricas pós-publicação da Meta API
+schedule_jobs
+id, post_id, bullmq_job_id, status, error_code, attempts, next_retry_at
+Controle de jobs de agendamento
+client_time_scores
+id, client_id, platform, day_of_week, hour, score, updated_at
+Heatmap de melhores horários por cliente
+client_profiles
+id, client_id, niche, target_audience, tone_of_voice, top_posts[]
+Contexto para os prompts do Gemini
+meta_tokens
+id, client_id, page_id, ig_account_id, access_token_enc, expires_at, last_verified_at
+Tokens Meta criptografados
+
+7. Cronograma de Desenvolvimento
+Sprint
+Semanas
+Entregas principais
+Sprint 1 — Base
+1–2
+Setup ambiente, banco de dados, módulo no sidebar, estrutura de rotas
+Sprint 2 — Gemini + Perfis
+3–4
+Integração Gemini API, gerador de posts, cadastro de perfis de clientes
+Sprint 3 — Calendário + Fila
+5–6
+Calendário visual, fila de posts, sistema de status, rascunhos
+Sprint 4 — Meta OAuth + FB
+7–8
+OAuth 2.0 Meta, gestão de tokens, publicação no Facebook (Feed + Carrossel)
+Sprint 5 — Instagram + BullMQ
+9–10
+Publicação IG via BullMQ, agendamento, retry automático, alertas de erro
+Sprint 6 — IA de Horários
+11–12
+Heatmap de engajamento, score por cliente, sugestões automáticas na UI
+Sprint 7 — Métricas
+13–14
+Coleta de métricas, dashboard de performance, relatórios por cliente
+
+MARCO CRÍTICO — PARALELO AO DEV
+O App Review da Meta deve ser submetido na Semana 1, paralelamente ao desenvolvimento. Ele leva de 1 a 4 semanas. Se deixado para depois, bloqueará os Sprints 4 e 5 e atrasará todo o projeto.
+
+8. Checklist Completo — Antes de Começar
+8.1 App Meta — ações imediatas
+#
+Ação
+Responsável
+Prazo
+Status
+1
+Confirmar que o App é do tipo Business no Meta for Developers
+Robson
+Imediato
+Pendente
+2
+Completar Business Verification (CNPJ, site, endereço)
+Robson
+Imediato
+Pendente
+3
+Solicitar todas as 7 permissões listadas na seção 2.2
+Dev
+Semana 1
+Pendente
+4
+Gravar vídeo de demonstração para o App Review (exigido pela Meta)
+Dev + Robson
+Semana 1
+Pendente
+5
+Submeter App Review com descrição de uso de cada permissão
+Dev
+Semana 1
+Pendente
+6
+Criar conta FB Page + IG Business de TESTE para desenvolvimento
+Robson
+Imediato
+Pendente
+
+8.2 Clientes existentes — verificar por conta
+Verificação
+BackStateFy
+Loja Fashion SP
+Clínica Bem Estar
+Facebook Page (não perfil pessoal)
+Verificar
+Verificar
+Verificar
+Instagram Business ou Creator
+Verificar
+Verificar
+Verificar
+IG vinculado à Page do Facebook
+Verificar
+Verificar
+Verificar
+Page Publishing Authorization (PPA)
+Verificar
+Verificar
+Verificar
+Administrador da Page (não só editor)
+Verificar
+Verificar
+Verificar
+
+8.3 Configurações técnicas
+Item
+Ação
+Status
+Gemini API Key
+Gerar em aistudio.google.com e salvar no .env como GEMINI_API_KEY
+Pendente
+Meta App ID + Secret
+Copiar do painel developers.facebook.com para o .env
+Pendente
+Bucket S3 / R2
+Criar bucket com acesso público para hospedagem de mídia
+Pendente
+Redis
+Instalar e configurar para o BullMQ (pode ser Railway ou Upstash)
+Pendente
+Ambiente de staging
+Criar ambiente separado do prod para testes da Meta API
+Pendente
+Criptografia de tokens
+Definir chave AES-256 para armazenamento seguro dos Page Tokens
+Pendente
+
+9. Segurança e Rate Limits
+9.1 Rate Limits da Meta API
+Limite
+Valor
+Impacto no sistema
+Chamadas por token de usuário
+200 por hora
+Não é problema para volume atual dos clientes
+Chamadas por app
+4.800 por dia
+Monitorar se escalar para muitos clientes
+Posts por conta FB/IG
+50 publicações / 24h
+Limitar agendamento na UI se necessário
+Tamanho máximo de vídeo
+1 GB por arquivo
+Validar no upload antes de enviar
+Container IG expira
+24 horas após criação
+Criar container próximo ao horário de publicação
+
+9.2 Boas práticas obrigatórias
+Todos os Page Tokens armazenados com AES-256 no banco — nunca em plain text
+Variáveis sensíveis (API keys, secrets) exclusivamente em variáveis de ambiente
+HTTPS obrigatório em todos os endpoints de callback OAuth
+Logs sem dados sensíveis — nunca logar tokens, senhas ou dados de clientes
+Validar tamanho e formato de mídia no frontend antes de fazer upload para S3/R2
+Implementar retry com backoff exponencial nos jobs BullMQ (1min → 5min → 15min)
+
+MetaReports — BackStateFy
+Dúvidas: alinhar diretamente com Robson Nobre
+v2.0 — Gemini API + Meta Graph API v22 — Março 2026
+

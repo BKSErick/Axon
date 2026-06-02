@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload para Supabase Storage</title>
+    <style>
+        body { font-family: Arial; background: #1a1a2e; color: #eee; padding: 40px; text-align: center; }
+        h1 { color: #00d4aa; }
+        .status { margin: 10px 0; padding: 8px 16px; border-radius: 6px; }
+        .ok { background: #1a4a3a; color: #4ade80; }
+        .err { background: #4a1a1a; color: #f87171; }
+        .wait { background: #4a3a1a; color: #fbbf24; }
+        #results { text-align: left; max-width: 800px; margin: 20px auto; }
+        button { background: #00d4aa; color: #000; border: none; padding: 16px 32px; font-size: 18px; border-radius: 8px; cursor: pointer; margin: 20px; }
+        button:hover { background: #00b894; }
+        input { display: none; }
+        .info { background: #1e293b; padding: 16px; border-radius: 8px; max-width: 600px; margin: 20px auto; text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>📤 Upload de Imagens para Apresentação</h1>
+    <div class="info">
+        <p><strong>Instruções:</strong></p>
+        <ol>
+            <li>Cole sua <strong>service_role key</strong> do Supabase abaixo</li>
+            <li>Clique em "Selecionar Imagens"</li>
+            <li>Selecione TODAS as imagens da pasta <code>d:\MetaAds\docs\apresentacao\</code></li>
+            <li>Aguarde o upload completar</li>
+        </ol>
+        <p>Encontre a key em: <a href="https://supabase.com/dashboard/project/whcfgflswdanptxsvfes/settings/api" target="_blank" style="color:#00d4aa">Supabase → Settings → API → service_role</a></p>
+    </div>
+    
+    <div style="max-width:600px; margin:20px auto;">
+        <input type="text" id="serviceKey" placeholder="Cole aqui a service_role key..." 
+               style="display:block; width:100%; padding:12px; background:#0f172a; border:1px solid #334155; color:#eee; border-radius:6px; font-size:14px; margin-bottom:16px;">
+    </div>
+
+    <input type="file" id="fileInput" multiple accept="image/*">
+    <button onclick="document.getElementById('fileInput').click()">📁 Selecionar Imagens</button>
+
+    <div id="results"></div>
+
+    <script>
+        const SUPABASE_URL = 'https://whcfgflswdanptxsvfes.supabase.co';
+        const BUCKET = 'apresentacao';
+        const results = document.getElementById('results');
+
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const key = document.getElementById('serviceKey').value.trim();
+            if (!key) {
+                results.innerHTML = '<div class="status err">❌ Cole a service_role key primeiro!</div>';
+                return;
+            }
+            
+            const files = e.target.files;
+            results.innerHTML = `<div class="status wait">⏳ Enviando ${files.length} arquivos...</div>`;
+            
+            let ok = 0, fail = 0;
+            
+            for (const file of files) {
+                const div = document.createElement('div');
+                div.className = 'status wait';
+                div.textContent = `⏳ Enviando ${file.name}...`;
+                results.appendChild(div);
+                
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${file.name}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'apikey': key,
+                            'Content-Type': file.type || 'image/png',
+                            'x-upsert': 'true',
+                        },
+                        body: file,
+                    });
+                    
+                    if (res.ok) {
+                        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${file.name}`;
+                        div.className = 'status ok';
+                        div.innerHTML = `✅ ${file.name} → <a href="${publicUrl}" target="_blank" style="color:#4ade80">${publicUrl}</a>`;
+                        ok++;
+                    } else {
+                        const err = await res.text();
+                        div.className = 'status err';
+                        div.textContent = `❌ ${file.name}: ${err}`;
+                        fail++;
+                    }
+                } catch (e) {
+                    div.className = 'status err';
+                    div.textContent = `❌ ${file.name}: ${e.message}`;
+                    fail++;
+                }
+            }
+            
+            const summary = document.createElement('div');
+            summary.className = `status ${fail === 0 ? 'ok' : 'err'}`;
+            summary.textContent = `📊 Resultado: ${ok} enviados, ${fail} falhas`;
+            results.appendChild(summary);
+        });
+    </script>
+</body>
+</html>

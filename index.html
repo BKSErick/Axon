@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Axon — Inteligência de mídia paga</title>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Axon — Dashboard de Performance" />
+  <meta property="og:description" content="Meta, Google e Instagram orgânico em um painel só, com IA." />
+  <meta property="og:image" content="/logo.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://meta.backstagefy.com.br" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="description" content="Dashboard profissional para gestão de mídia paga." />
+
+  <!-- Fontes: Axon (Inter Tight + JetBrains Mono) + legado (Plus Jakarta) + ícones material-symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap"
+    rel="stylesheet">
+
+  <!-- ───────────────────────────────────────────────────────────────
+       TAILWIND (Play CDN) — camada de compatibilidade
+       Por que: alguns componentes legados (ex: client/ClientReports.jsx)
+       usam classes Tailwind. O projeto não tinha Tailwind instalado.
+       - preflight DESLIGADO: não reseta os estilos do Axon nem do legado.
+       - cores `primary`/`accent` mapeadas pro verde/ciano do tema antigo.
+       Para PRODUÇÃO, troque o Play CDN pela instalação real (ver
+       MIGRATION.md §11) — o CDN mostra um aviso no console e não é ideal
+       pra build final, mas funciona pra validar a transição.
+       ─────────────────────────────────────────────────────────────── -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      corePlugins: { preflight: false },
+      theme: {
+        extend: {
+          colors: {
+            primary: { DEFAULT: '#10b981', hover: '#059669' },
+            accent: '#06b6d4',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

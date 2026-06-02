@@ -1,0 +1,157 @@
+/* ============================================
+   LEGACY STYLES — escopados sob .legacy-scope
+   Migrado de src/index.css do MetaReports antigo.
+   Por que escopar: o Axon (index.css novo) é dono do :root e usa
+   variáveis no formato RGB ("10 13 20"), enquanto o legado usa HEX
+   ("#09090b") com os MESMOS nomes (--bg, --border, --text, --accent).
+   Se ambos definissem :root, um quebraria o outro. Aqui as variáveis
+   legadas são redeclaradas APENAS dentro de .legacy-scope (cascata de
+   custom properties), e os seletores globais (body, table, th, td,
+   button, main, .card, .nav-btn…) viram .legacy-scope <sel>.
+   Os componentes legados são renderizados dentro de <div class="legacy-scope">.
+   ============================================ */
+
+.legacy-scope {
+  --bg: #09090b;
+  --card: #18181b;
+  --card-hover: #27272a;
+  --surf: #27272a;
+  --border: #27272a;
+  --border-muted: #1e1e21;
+  --text: #fafafa;
+  --text-dim: #a1a1aa;
+  --text-muted: #71717a;
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --accent: #06b6d4;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --blue: #3b82f6;
+  --violet: #8b5cf6;
+
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.legacy-scope *,
+.legacy-scope *::before,
+.legacy-scope *::after {
+  box-sizing: border-box;
+}
+
+.legacy-scope input,
+.legacy-scope select,
+.legacy-scope textarea {
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+.legacy-scope input:focus,
+.legacy-scope select:focus,
+.legacy-scope textarea:focus { outline: none; }
+.legacy-scope button { font-family: inherit; cursor: pointer; }
+
+.legacy-scope .fadein { animation: fadeIn .25s ease both; }
+.legacy-scope .fadeup { animation: fadeUp .3s ease both; }
+
+.legacy-scope .card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.legacy-scope .card-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-xl);
+}
+.legacy-scope .row-hover:hover td { background: rgba(16, 185, 129, .03) !important; }
+
+.legacy-scope .nav-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-radius: var(--radius-md);
+  color: var(--text-dim); font-weight: 600;
+  transition: all .2s; border: 1px solid transparent;
+}
+.legacy-scope .nav-btn:hover { background: rgba(16, 185, 129, .06) !important; color: var(--primary) !important; }
+.legacy-scope .nav-btn.active { background: rgba(16, 185, 129, .1) !important; color: var(--primary) !important; border-color: rgba(16, 185, 129, .2); }
+
+.legacy-scope .btn-p {
+  background: var(--primary); color: #fff; border-radius: var(--radius-md);
+  padding: 10px 20px; font-weight: 700; border: none; transition: all .2s;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.legacy-scope .btn-p:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+
+.legacy-scope .btn-g {
+  background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 10px 20px; font-weight: 600; transition: all .2s;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.legacy-scope .btn-g:hover { background: var(--surf); color: var(--text); border-color: var(--text-muted); }
+
+.legacy-scope .pill-input {
+  width: 100%; background: var(--surf); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 10px 14px; color: var(--text); transition: all .2s;
+}
+.legacy-scope .pill-input:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1); }
+
+.legacy-scope main { scrollbar-gutter: stable; }
+.legacy-scope table { width: 100%; border-collapse: collapse; }
+.legacy-scope th {
+  padding: 12px 18px; text-align: left; font-size: 11px; font-weight: 800;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+.legacy-scope td { padding: 14px 18px; border-bottom: 1px solid var(--border-muted); font-size: 13px; }
+
+.legacy-scope .spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: currentColor; border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+
+/* Keyframes are global (safe — no collision) */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ============================================
+   Compat: classes usadas por componentes Tailwind legados
+   (ex: client/ClientReports.jsx). Não estavam definidas em lugar
+   nenhum — definidas aqui pra que, se você reativar essas telas,
+   elas renderizem corretamente junto com o Tailwind Play CDN.
+   ============================================ */
+.backstagefy-glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Ícones material-symbols (a fonte é carregada no index.html) */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
