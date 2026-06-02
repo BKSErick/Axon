@@ -10,19 +10,50 @@ const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 let cachedGlobalToken = null;
+let cachedGlobalTokenExpires = null;
+
+const dispatchMetaTokenAlert = (detail) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(META_TOKEN_INVALID_EVENT, { detail }));
+};
 
 export const getGlobalToken = async () => {
-    if (cachedGlobalToken) return cachedGlobalToken;
+    if (cachedGlobalToken) {
+        if (!cachedGlobalTokenExpires) return cachedGlobalToken;
+
+        const expiresAt = new Date(`${cachedGlobalTokenExpires}T00:00:00`);
+        const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / 86400000);
+        if (daysLeft <= 0) {
+            const expiredAt = cachedGlobalTokenExpires;
+            cachedGlobalToken = null;
+            cachedGlobalTokenExpires = null;
+            dispatchMetaTokenAlert({
+                code: 190,
+                message: 'Token Meta global expirado. Atualize o token em Configurações.',
+                expiresAt: expiredAt,
+            });
+        } else {
+            if (daysLeft <= 7) {
+                dispatchMetaTokenAlert({
+                    code: 'TOKEN_EXPIRING_SOON',
+                    message: `Token Meta global expira em ${daysLeft} dia(s).`,
+                    expiresAt: cachedGlobalTokenExpires,
+                });
+            }
+            return cachedGlobalToken;
+        }
+    }
 
     try {
         const { data, error } = await supabase
             .from('business_managers')
-            .select('name')
+            .select('name, token_expires')
             .eq('bm_id', 'SYSTEM_USER_TOKEN')
             .single();
 
         if (data && data.name) {
             cachedGlobalToken = data.name;
+            cachedGlobalTokenExpires = data.token_expires || null;
             return cachedGlobalToken;
         }
     } catch (e) {
@@ -60,6 +91,7 @@ const setCache = (key, data) => {
 export const clearMetaCache = () => {
     _cache.clear();
     cachedGlobalToken = null;
+    cachedGlobalTokenExpires = null;
 };
 
 /**
@@ -104,6 +136,11 @@ export const fetchMeta = async (endpoint, params = {}, allData = []) => {
             // Se for erro de Rate Limit (17 ou 32), avisamos no console de forma destacada
             if (data.error.code === 17 || data.error.code === 32) {
                 console.error('🛑 META RATE LIMIT REACHED:', data.error.message);
+            }
+            if ([10, 102, 190, 200].includes(Number(data.error.code))) {
+                cachedGlobalToken = null;
+                cachedGlobalTokenExpires = null;
+                dispatchMetaTokenAlert(data.error);
             }
             throw new Error(data.error.message);
         }
