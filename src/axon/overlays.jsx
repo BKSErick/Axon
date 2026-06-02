@@ -15,7 +15,7 @@ export function TokenAlert({ alert, onClose, onConfigure }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 18 }}>🔑</span>
         <span style={{ color: '#fca5a5', fontWeight: 600, fontSize: 13 }}>
-          Token Meta inválido ou expirado (Erro {alert.code}) — Gere um novo System User Token no Meta Business Manager e atualize em Configurações.
+          Token Meta inválido ou expirado (Erro {alert.code}) - atualize o segredo no Supabase/Edge Functions.
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

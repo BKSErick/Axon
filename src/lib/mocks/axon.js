@@ -116,7 +116,7 @@ export const MOCK_ONBOARDING_STEPS = [
 
 // Demo notifications (até criar a tabela notifications no Supabase)
 export const MOCK_NOTIFICATIONS = [
-  { id: 'n1', kind: 'alert',   title: 'Token Meta expira em 7 dias', body: 'Renove o System User Token em Configurações.', action: { target: 'view', view: 'admin-settings' }, read: false, created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString() },
+  { id: 'n1', kind: 'alert',   title: 'Token Meta expira em 7 dias', body: 'Atualize o segredo Meta no Supabase/Edge Functions.', action: { target: 'view', view: 'admin-settings' }, read: false, created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString() },
   { id: 'n2', kind: 'success', title: '+3 leads quentes em Alpha Business', body: 'Campanha [LEADS] [WEBINAR] está performando 38% acima da média.', action: { target: 'copilot' }, read: false, created_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
   { id: 'n3', kind: 'warn',    title: 'CTR caindo em "Via BR Cenografia"', body: 'CTR -22% últimos 7d. Considere refresh de criativos.', action: { target: 'view', view: 'admin-campaigns' }, read: true,  created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() },
 ];

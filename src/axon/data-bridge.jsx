@@ -7,14 +7,14 @@ import React, { createContext, useContext } from 'react';
 import {
   useAllClients, useAllBMs, useAllAdAccounts, useAdminOverview,
   useAllCampaigns, useAllReports, useNotifications,
-  useAudiences, useGoogleCampaigns, useGoogleKeywords,
+  useAudiences, useSocialOverview, useGoogleCampaigns, useGoogleKeywords,
 } from '../lib/hooks/useAxonData';
 import { useKpis, useCampaigns, useAds, useEngagementAnalytics, useReports } from '../lib/hooks/useClientData';
 
 const AxonDataCtx = createContext({
   // admin
   clients: [], bms: [], accounts: [], adminOverview: null,
-  campaigns: [], reports: [], audiences: [],
+  campaigns: [], reports: [], audiences: [], socialOverview: null,
   // client (filled when clientId provided)
   clientKpis: null, clientCampaigns: [], clientAds: [], clientReports: [], clientEngagement: null,
   // shared
@@ -32,7 +32,8 @@ export function AxonDataProvider({ clientId, role, isAdmin = false, children }) 
   const adminOverview = useAdminOverview(enableAdmin);
   const campaigns = useAllCampaigns('last_30d', enableAdmin);
   const reports = useAllReports(enableAdmin);
-  const audiences = useAudiences();
+  const audiences = useAudiences(null, enableAdmin);
+  const socialOverview = useSocialOverview(enableAdmin);
 
   // Client queries (quando há clientId)
   const clientKpis = useKpis(clientId);
@@ -56,6 +57,7 @@ export function AxonDataProvider({ clientId, role, isAdmin = false, children }) 
     campaigns: campaigns.data,
     reports: reports.data,
     audiences: audiences.data,
+    socialOverview: socialOverview.data,
     // client
     clientKpis: clientKpis.data,
     clientCampaigns: clientCampaigns.data,
@@ -74,6 +76,8 @@ export function AxonDataProvider({ clientId, role, isAdmin = false, children }) 
       adminOverview: adminOverview.loading,
       campaigns: campaigns.loading,
       reports: reports.loading,
+      audiences: audiences.loading,
+      socialOverview: socialOverview.loading,
       clientKpis: clientKpis.loading,
       clientCampaigns: clientCampaigns.loading,
       clientAds: clientAds.loading,

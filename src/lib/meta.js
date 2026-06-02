@@ -60,7 +60,7 @@ export const getGlobalToken = async () => {
         // silent fallback
     }
 
-    return import.meta.env.VITE_META_TOKEN;
+    return null;
 };
 
 const getCacheKey = (endpoint, params) => {
@@ -795,7 +795,7 @@ export const getLeadForms = async (adAccountId = null) => {
     // ── Fetch lead forms from each page ──────────────────────────────────────
     for (const page of uniquePages) {
         try {
-            const token = page.access_token || import.meta.env.VITE_META_TOKEN;
+            const token = page.access_token;
             const formsData = await fetchMeta(`${page.id}/leadgen_forms`, {
                 fields: 'id,name,leads_count,created_time,status',
                 limit: 50,
@@ -829,8 +829,7 @@ export const getLeadForms = async (adAccountId = null) => {
  */
 export const getLeadsByForm = async (formId, pageToken) => {
     try {
-        const token = pageToken || import.meta.env.VITE_META_TOKEN;
-        const tokenParam = token !== import.meta.env.VITE_META_TOKEN ? { access_token: token } : {};
+        const tokenParam = pageToken ? { access_token: pageToken } : {};
 
         let allLeads = [];
         let nextUrl = null;
@@ -925,7 +924,7 @@ export const discoverSocialProfiles = async (clients, adAccounts, onLog) => {
         console.log(`[syncSocial] ${msg}`);
         if (onLog) onLog(msg);
     };
-    const token = import.meta.env.VITE_META_TOKEN;
+    const token = await getGlobalToken();
     if (!token) { log('❌ Token Meta não encontrado!'); return results; }
 
     // ── Step 1: Fetch all BM owned pages ─────────────────────────────────────

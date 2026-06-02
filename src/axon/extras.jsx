@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { I } from './icons';
 import { fmt } from './common';
+import { supabase } from '../lib/supabase';
 
 /* -------- Modal shell -------- */
 function Modal({ open, onClose, title, children, footer, width = 480 }) {
@@ -115,9 +116,35 @@ export function LeadDetailModal({ open, onClose, lead }) {
 /* -------- New Client / BM / Audience / Keyword / Negative / GoogleCampaign / Send Reports / Schedule Reports -------- */
 export function NewClientModal({ open, onClose }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '', plan: 'Pro' });
+  const [saving, setSaving] = useState(false);
+  const createClient = async () => {
+    if (!form.name.trim()) {
+      toast('Informe o nome do cliente', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('clients').insert({
+        name: form.name.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        active: true,
+        joined: new Date().toISOString().slice(0, 10),
+      });
+      if (error) throw error;
+      toast('Cliente criado', 'success');
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      console.error('[NewClientModal]', e);
+      toast(`Erro ao criar cliente: ${e.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <Modal open={open} onClose={onClose} title="Novo cliente"
-      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Cliente criado', 'success'); onClose(); }}>Criar</button></>}>
+      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving} onClick={createClient}>{saving ? 'Criando...' : 'Criar'}</button></>}>
       <Field label="Nome"><input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
       <Field label="Email"><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
       <Field label="Telefone"><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></Field>
@@ -131,23 +158,95 @@ export function NewClientModal({ open, onClose }) {
 }
 
 export function NewBMModal({ open, onClose }) {
+  const [form, setForm] = useState({ name: '', bmId: '' });
+  const [saving, setSaving] = useState(false);
+  const createBM = async () => {
+    if (!form.name.trim() || !form.bmId.trim()) {
+      toast('Informe nome e Meta BM ID', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('business_managers').insert({
+        name: form.name.trim(),
+        bm_id: form.bmId.trim(),
+        status: 'connected',
+        connected_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      toast('Business Manager cadastrado', 'success');
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      console.error('[NewBMModal]', e);
+      toast(`Erro ao cadastrar BM: ${e.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <Modal open={open} onClose={onClose} title="Conectar Business Manager"
-      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Aguardando token Meta…'); onClose(); }}>Continuar</button></>}>
-      <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Conecte uma Business Manager do Meta com um System User Token.</p>
-      <Field label="Nome interno"><input className="input" placeholder="ex: Agência Principal" /></Field>
-      <Field label="Meta BM ID"><input className="input" placeholder="ex: 930684123456789" /></Field>
-      <Field label="System User Token"><input className="input" type="password" placeholder="EAA…" /></Field>
+      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving} onClick={createBM}>{saving ? 'Salvando...' : 'Salvar BM'}</button></>}>
+      <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Cadastre o Business Manager. Token Meta fica somente nos Supabase Secrets/Edge Functions, nunca no front.</p>
+      <Field label="Nome interno"><input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="ex: Agência Principal" /></Field>
+      <Field label="Meta BM ID"><input className="input" value={form.bmId} onChange={e => setForm({ ...form, bmId: e.target.value })} placeholder="ex: 930684123456789" /></Field>
     </Modal>
   );
 }
 
 export function RelinkModal({ open, onClose, account }) {
+  const [clients, setClients] = useState([]);
+  const [clientId, setClientId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name')
+        .order('name', { ascending: true });
+      if (!mounted) return;
+      if (error) {
+        console.error('[RelinkModal clients]', error);
+        toast(`Erro ao carregar clientes: ${error.message}`, 'error');
+        return;
+      }
+      setClients(data || []);
+      setClientId(account?.client || '');
+    })();
+    return () => { mounted = false; };
+  }, [open, account]);
+
+  const linkAccount = async () => {
+    if (!account || !clientId) {
+      toast('Selecione um cliente', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      let query = supabase.from('ad_accounts').update({ client_id: clientId });
+      if (account.rowId) query = query.eq('id', account.rowId);
+      else query = query.eq('meta_id', account.metaId || account.id);
+      const { error } = await query;
+      if (error) throw error;
+      toast('Conta vinculada', 'success');
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      console.error('[RelinkModal]', e);
+      toast(`Erro ao vincular conta: ${e.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose} title="Vincular a um cliente"
-      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={() => { toast('Conta vinculada', 'success'); onClose(); }}>Vincular</button></>}>
+      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving} onClick={linkAccount}>{saving ? 'Vinculando...' : 'Vincular'}</button></>}>
       {account && <p className="muted" style={{ fontSize: 13 }}>Conta: <strong>{account.name}</strong></p>}
-      <Field label="Cliente"><select className="input"><option>Selecione um cliente…</option></select></Field>
+      <Field label="Cliente"><select className="input" value={clientId} onChange={e => setClientId(e.target.value)}><option value="">Selecione um cliente...</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
     </Modal>
   );
 }

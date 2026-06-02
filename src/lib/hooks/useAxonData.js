@@ -7,9 +7,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { fetchExtendedOverviewData, calculateBusinessMetrics } from '../metricsAggregator';
 import {
-  MOCK_AUDIENCES, MOCK_NOTIFICATIONS, MOCK_GOOGLE_CAMPAIGNS,
+  MOCK_NOTIFICATIONS, MOCK_GOOGLE_CAMPAIGNS,
   MOCK_KEYWORDS, MOCK_NEGATIVE,
 } from '../mocks/axon';
+
+function firstValue(...values) {
+  return values.find(v => v !== undefined && v !== null && v !== '');
+}
 
 // ---------- CLIENTS (admin) ----------
 export function useAllClients(enabled = true) {
@@ -75,27 +79,32 @@ export function useAllBMs(enabled = true) {
         const { data: rows, error } = await supabase
           .from('business_managers')
           .select('*')
+          .neq('bm_id', 'SYSTEM_USER_TOKEN')
           .order('connected_at', { ascending: false });
         if (error) throw error;
         if (!mounted) return;
-        // Hidratar count de contas
-        const ids = (rows || []).map(r => r.id);
+
+        const bmIds = (rows || []).map(r => r.bm_id || r.id).filter(Boolean);
         const { data: accs } = await supabase
           .from('ad_accounts')
           .select('bm_id')
-          .in('bm_id', ids.length ? ids : ['__none__']);
+          .in('bm_id', bmIds.length ? bmIds : ['__none__']);
         const byBM = {};
         (accs || []).forEach(a => { byBM[a.bm_id] = (byBM[a.bm_id] || 0) + 1; });
-        setData((rows || []).map(r => ({
-          id: r.meta_id || r.id,
-          name: r.name,
-          connected: r.created_at,
-          accounts: byBM[r.id] || 0,
-          status: r.token_status || 'ok',
-          health: r.health_score ?? 90,
-          owner: r.owner_name || '—',
-          tokenExp: r.token_expires_at,
-        })));
+        setData((rows || []).map(r => {
+          const bmId = r.bm_id || r.id;
+          return {
+            id: bmId,
+            rowId: r.id,
+            name: r.name,
+            connected: r.connected_at || r.created_at,
+            accounts: byBM[bmId] || 0,
+            status: r.status || r.token_status || 'ok',
+            health: r.health_score ?? 90,
+            owner: r.owner_name || 'BKS Grow',
+            tokenExp: r.token_expires || r.token_expires_at,
+          };
+        }));
       } catch (e) {
         console.error('[useAllBMs]', e);
       } finally {
@@ -118,19 +127,26 @@ export function useAllAdAccounts(enabled = true) {
     let mounted = true;
     (async () => {
       try {
-        const { data: rows, error } = await supabase
-          .from('ad_accounts')
-          .select(`
-            id, meta_id, name, status, client_id, bm_id, spend,
-            clients(name),
-            business_managers(name)
-          `);
+        const [{ data: rows, error }, { data: bms }] = await Promise.all([
+          supabase
+            .from('ad_accounts')
+            .select('id, meta_id, name, status, client_id, bm_id, spend, clients(name)'),
+          supabase
+            .from('business_managers')
+            .select('bm_id, name')
+            .neq('bm_id', 'SYSTEM_USER_TOKEN'),
+        ]);
         if (error) throw error;
         if (!mounted) return;
+        const byBmId = {};
+        (bms || []).forEach(b => { byBmId[b.bm_id] = b.name; });
         setData((rows || []).map(r => ({
           id: r.meta_id || r.id,
+          rowId: r.id,
+          metaId: r.meta_id,
           name: r.name,
-          bm: r.business_managers?.name || '—',
+          bm: byBmId[r.bm_id] || '—',
+          bmId: r.bm_id,
           client: r.client_id,
           clientName: r.clients?.name || null,
           spend: r.spend || 0,
@@ -313,9 +329,141 @@ export function useNotifications(userId) {
   return { data, loading, markRead, markAllRead };
 }
 
-// ---------- AUDIENCES (mock até tabela existir) ----------
-export function useAudiences(_clientId) {
-  return { data: MOCK_AUDIENCES, loading: false };
+// ---------- AUDIENCES ----------
+export function useAudiences(clientId, enabled = true) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!enabled) { setLoading(false); return; }
+    let mounted = true;
+    (async () => {
+      try {
+        let query = supabase
+          .from('audiences')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (clientId) query = query.eq('client_id', clientId);
+        const { data: rows, error } = await query;
+        if (error) throw error;
+        if (!mounted) return;
+        setData((rows || []).map(r => ({
+          id: r.id,
+          name: r.name || r.title || 'Audiência sem nome',
+          type: r.type || r.audience_type || 'Custom',
+          source: r.source || r.origin || 'Supabase',
+          origin: r.origin || r.source,
+          client: r.client_id,
+          client_id: r.client_id,
+          size: r.size || r.estimated_size || 0,
+          status: r.status || 'ready',
+          match: r.match_rate || r.match || null,
+          used: r.used_in || r.used || null,
+          ctr: r.ctr || null,
+          cpa: r.cpa || null,
+        })));
+      } catch (e) {
+        console.error('[useAudiences]', e);
+        if (mounted) setData([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [clientId, enabled]);
+
+  return { data, loading };
+}
+
+// ---------- SOCIAL MEDIA CONNECTIONS ----------
+export function useSocialOverview(enabled = true) {
+  const [data, setData] = useState({
+    profiles: [],
+    connectedCount: 0,
+    posts30: null,
+    reach: null,
+    engagement: null,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!enabled) { setLoading(false); return; }
+    let mounted = true;
+    (async () => {
+      try {
+        const [profilesRes, connectionsRes] = await Promise.all([
+          supabase.from('social_client_profiles').select('*'),
+          supabase.from('client_meta_connections').select('*'),
+        ]);
+
+        const profiles = profilesRes.error ? [] : (profilesRes.data || []);
+        const connections = connectionsRes.error ? [] : (connectionsRes.data || []);
+        const profileByClient = {};
+        profiles.forEach(p => { profileByClient[p.client_id] = p; });
+        const connectionByClient = {};
+        connections.forEach(c => { connectionByClient[c.client_id] = c; });
+
+        const clientIds = Array.from(new Set([
+          ...profiles.map(p => p.client_id).filter(Boolean),
+          ...connections.map(c => c.client_id).filter(Boolean),
+        ]));
+
+        const rows = clientIds.map(clientId => {
+          const profile = profileByClient[clientId] || {};
+          const connection = connectionByClient[clientId] || {};
+          const igAccounts = Array.isArray(connection.instagram_accounts) ? connection.instagram_accounts : [];
+          const ig = igAccounts[0] || {};
+          const pages = Array.isArray(connection.pages) ? connection.pages : [];
+          const page = pages[0] || {};
+          const username = firstValue(
+            profile.instagram_username,
+            profile.ig_username,
+            ig.username,
+            ig.name,
+            connection.instagram_username
+          );
+          const instagramId = firstValue(
+            profile.instagram_account_id,
+            profile.instagram_business_id,
+            ig.id,
+            connection.instagram_business_id
+          );
+          const facebookPage = firstValue(profile.facebook_page_name, page.name);
+          const connected = Boolean(username || instagramId || facebookPage || connection.status === 'active');
+          return {
+            clientId,
+            connected,
+            username,
+            instagramId,
+            facebookPage,
+            status: connected ? 'ok' : 'pending',
+            followers: firstValue(profile.followers_count, ig.followers_count),
+            posts30: firstValue(profile.posts_30d, profile.media_count_30d, ig.media_count),
+            reach: firstValue(profile.reach_30d, profile.reach),
+            engagement: firstValue(profile.engagement_rate, profile.avg_engagement),
+            tokenExpiresAt: connection.token_expires_at || connection.expires_at,
+          };
+        });
+
+        if (!mounted) return;
+        setData({
+          profiles: rows,
+          connectedCount: rows.filter(r => r.connected).length,
+          posts30: rows.reduce((sum, r) => sum + (Number(r.posts30) || 0), 0) || null,
+          reach: rows.reduce((sum, r) => sum + (Number(r.reach) || 0), 0) || null,
+          engagement: null,
+        });
+      } catch (e) {
+        console.error('[useSocialOverview]', e);
+        if (mounted) setData({ profiles: [], connectedCount: 0, posts30: null, reach: null, engagement: null });
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [enabled]);
+
+  return { data, loading };
 }
 
 // ---------- GOOGLE ADS (mock — sem integração ainda) ----------
